@@ -1,7 +1,8 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'background_keepalive_guide_page.dart';
 import '../models/todo_draft.dart';
 import '../models/todo_filter.dart';
 import '../models/todo_item.dart';
@@ -13,11 +14,7 @@ import '../widgets/todo_hero_panel.dart';
 import '../widgets/todo_sections.dart';
 
 class TodoHomePage extends StatefulWidget {
-  const TodoHomePage({
-    super.key,
-    this.storage,
-    this.notificationService,
-  });
+  const TodoHomePage({super.key, this.storage, this.notificationService});
 
   final TodoStorage? storage;
   final NotificationService? notificationService;
@@ -29,24 +26,51 @@ class TodoHomePage extends StatefulWidget {
 class _TodoHomePageState extends State<TodoHomePage> {
   late final TodoStorage _storage;
   late final NotificationService _notificationService;
+  late final bool _ownsNotificationService;
+  StreamSubscription<int>? _notificationSubscription;
 
   List<TodoItem> _todos = <TodoItem>[];
   int _nextId = 1;
   TodoFilter _filter = TodoFilter.pending;
   bool _loading = true;
+  int? _pendingNotificationTodoId;
+  bool _showingReminderDialog = false;
+  NotificationPermissionStatus? _permissionStatus;
+  bool _autoStartConfirmed = false;
+  bool _unrestrictedBackgroundConfirmed = false;
 
   @override
   void initState() {
     super.initState();
     _storage = widget.storage ?? TodoStorage();
     _notificationService = widget.notificationService ?? NotificationService();
+    _ownsNotificationService = widget.notificationService == null;
+    _notificationSubscription = _notificationService.notificationSelectionStream
+        .listen(_handleNotificationSelection);
     unawaited(_bootstrap());
+  }
+
+  @override
+  void dispose() {
+    _notificationSubscription?.cancel();
+    if (_ownsNotificationService) {
+      unawaited(_notificationService.dispose());
+    }
+    super.dispose();
   }
 
   Future<void> _bootstrap() async {
     await _notificationService.initialize();
     final List<TodoItem> todos = await _storage.loadTodos();
     final int nextId = await _storage.loadNextId();
+    final bool autoStartConfirmed = await _storage.loadAutoStartConfirmed();
+    final bool unrestrictedBackgroundConfirmed = await _storage
+        .loadUnrestrictedBackgroundConfirmed();
+    final NotificationPermissionStatus permissionStatus =
+        await _notificationService.getPermissionStatusWithAutoStart(
+          autoStartGranted: autoStartConfirmed,
+          unrestrictedBackgroundGranted: unrestrictedBackgroundConfirmed,
+        );
 
     if (!mounted) return;
 
@@ -54,30 +78,13 @@ class _TodoHomePageState extends State<TodoHomePage> {
       _todos = todos;
       _nextId = nextId;
       _loading = false;
+      _permissionStatus = permissionStatus;
+      _autoStartConfirmed = autoStartConfirmed;
+      _unrestrictedBackgroundConfirmed = unrestrictedBackgroundConfirmed;
     });
 
-    await _autoCompleteOverdueTodos();
+    _presentReminderDialogIfNeeded();
     unawaited(_notificationService.syncTodos(_todos));
-  }
-
-  Future<void> _autoCompleteOverdueTodos() async {
-    final DateTime now = DateTime.now();
-    final List<TodoItem> updated = _todos.map((TodoItem item) {
-      final bool overdue = !item.completed &&
-          item.dueAt != null &&
-          item.dueAt!.isBefore(now);
-      return overdue ? item.copyWith(completed: true) : item;
-    }).toList();
-
-    if (_listEquals(_todos, updated)) {
-      return;
-    }
-
-    setState(() {
-      _todos = updated;
-    });
-
-    await _persistState();
   }
 
   Future<void> _persistState() async {
@@ -91,6 +98,133 @@ class _TodoHomePageState extends State<TodoHomePage> {
     await _bootstrap();
   }
 
+  Future<void> _ensureReminderPermissions() async {
+    final NotificationPermissionStatus status = await _notificationService
+        .ensurePermissionsWithAutoStart(
+          autoStartGranted: _autoStartConfirmed,
+          unrestrictedBackgroundGranted: _unrestrictedBackgroundConfirmed,
+        );
+    if (!mounted) return;
+
+    setState(() {
+      _permissionStatus = status;
+    });
+
+    if (status.allRequiredGranted) {
+      await _notificationService.syncTodos(_todos);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('提醒权限已开启，可以正常接收闹铃提醒了')));
+      return;
+    }
+
+    final String missing = status.missingRequiredPermissions.join('、');
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('还缺少 $missing，请继续在系统页面中允许')));
+  }
+
+  Future<void> _openKeepAliveGuide() async {
+    final Object? result = await Navigator.of(context).push<Object?>(
+      MaterialPageRoute<Object?>(
+        builder: (BuildContext context) => const BackgroundKeepAliveGuidePage(),
+      ),
+    );
+
+    if (result is! Map<String, bool>) {
+      return;
+    }
+
+    final bool autoStartConfirmed = result['autoStartConfirmed'] ?? false;
+    final bool unrestrictedBackgroundConfirmed =
+        result['unrestrictedBackgroundConfirmed'] ?? false;
+
+    await _storage.saveAutoStartConfirmed(autoStartConfirmed);
+    await _storage.saveUnrestrictedBackgroundConfirmed(
+      unrestrictedBackgroundConfirmed,
+    );
+
+    final NotificationPermissionStatus status = await _notificationService
+        .getPermissionStatusWithAutoStart(
+          autoStartGranted: autoStartConfirmed,
+          unrestrictedBackgroundGranted: unrestrictedBackgroundConfirmed,
+        );
+
+    if (!mounted) return;
+
+    setState(() {
+      _autoStartConfirmed = autoStartConfirmed;
+      _unrestrictedBackgroundConfirmed = unrestrictedBackgroundConfirmed;
+      _permissionStatus = status;
+    });
+  }
+
+  void _handleNotificationSelection(int todoId) {
+    _pendingNotificationTodoId = todoId;
+    _presentReminderDialogIfNeeded();
+  }
+
+  void _presentReminderDialogIfNeeded() {
+    if (!mounted ||
+        _loading ||
+        _showingReminderDialog ||
+        _pendingNotificationTodoId == null) {
+      return;
+    }
+
+    final TodoItem? item = _findTodoById(_pendingNotificationTodoId!);
+    if (item == null) {
+      _pendingNotificationTodoId = null;
+      return;
+    }
+
+    _showingReminderDialog = true;
+    final int todoId = item.id;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+
+      final TodoItem? latestItem = _findTodoById(todoId);
+      if (latestItem == null) {
+        _pendingNotificationTodoId = null;
+        _showingReminderDialog = false;
+        return;
+      }
+
+      final bool? shouldOpen = await showDialog<bool>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('提醒时间到了'),
+            content: Text(
+              latestItem.notes.trim().isEmpty
+                  ? latestItem.title
+                  : '${latestItem.title}\n\n${latestItem.notes.trim()}',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('知道了'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('打开待办'),
+              ),
+            ],
+          );
+        },
+      );
+
+      _pendingNotificationTodoId = null;
+      _showingReminderDialog = false;
+
+      if (shouldOpen == true && mounted) {
+        await _openEditor(item: latestItem);
+      }
+    });
+  }
+
   List<TodoItem> get _visibleTodos {
     final DateTime now = DateTime.now();
     final List<TodoItem> filtered = switch (_filter) {
@@ -99,10 +233,10 @@ class _TodoHomePageState extends State<TodoHomePage> {
       TodoFilter.completed =>
         _todos.where((TodoItem item) => item.completed).toList(),
       TodoFilter.today => _todos.where((TodoItem item) {
-          return !item.completed &&
-              item.dueAt != null &&
-              _isSameDay(item.dueAt!, now);
-        }).toList(),
+        return !item.completed &&
+            item.dueAt != null &&
+            _isSameDay(item.dueAt!, now);
+      }).toList(),
     };
 
     filtered.sort((TodoItem a, TodoItem b) {
@@ -117,7 +251,8 @@ class _TodoHomePageState extends State<TodoHomePage> {
     return filtered;
   }
 
-  int get _pendingCount => _todos.where((TodoItem item) => !item.completed).length;
+  int get _pendingCount =>
+      _todos.where((TodoItem item) => !item.completed).length;
 
   String get _dateLabel {
     const List<String> weekdays = <String>[
@@ -143,10 +278,12 @@ class _TodoHomePageState extends State<TodoHomePage> {
   List<TodoItem> get _todayTodos {
     final DateTime now = DateTime.now();
     return _todos
-        .where((TodoItem item) =>
-            !item.completed &&
-            item.dueAt != null &&
-            _isSameDay(item.dueAt!, now))
+        .where(
+          (TodoItem item) =>
+              !item.completed &&
+              item.dueAt != null &&
+              _isSameDay(item.dueAt!, now),
+        )
         .toList();
   }
 
@@ -281,6 +418,15 @@ class _TodoHomePageState extends State<TodoHomePage> {
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                         children: <Widget>[
+                          if (_permissionStatus != null &&
+                              !_permissionStatus!
+                                  .allRequiredGranted) ...<Widget>[
+                            _PermissionNotice(
+                              status: _permissionStatus!,
+                              onPressed: _ensureReminderPermissions,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                           TodoHeroPanel(
                             dateLabel: _dateLabel,
                             greeting: _greeting,
@@ -288,6 +434,14 @@ class _TodoHomePageState extends State<TodoHomePage> {
                             onAdd: () => _openEditor(),
                           ),
                           const SizedBox(height: 16),
+                          if (_permissionStatus != null &&
+                              !_permissionStatus!
+                                  .allRequiredGranted) ...<Widget>[
+                            _BackgroundKeepAliveNotice(
+                              onOpenGuide: _openKeepAliveGuide,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
                           TodoFilterSurface(
                             selected: _filter,
                             onSelectionChanged: (TodoFilter value) {
@@ -317,22 +471,143 @@ class _TodoHomePageState extends State<TodoHomePage> {
   bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
-  bool _listEquals(List<TodoItem> a, List<TodoItem> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    for (int i = 0; i < a.length; i++) {
-      final TodoItem left = a[i];
-      final TodoItem right = b[i];
-      if (left.id != right.id ||
-          left.title != right.title ||
-          left.notes != right.notes ||
-          left.createdAt != right.createdAt ||
-          left.dueAt != right.dueAt ||
-          left.completed != right.completed) {
-        return false;
+  TodoItem? _findTodoById(int id) {
+    for (final TodoItem item in _todos) {
+      if (item.id == id) {
+        return item;
       }
     }
-    return true;
+    return null;
+  }
+}
+
+class _PermissionNotice extends StatelessWidget {
+  const _PermissionNotice({required this.status, required this.onPressed});
+
+  final NotificationPermissionStatus status;
+  final Future<void> Function() onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final String missing = status.missingRequiredPermissions.join('、');
+    final bool fullScreenReady = status.fullScreenIntentGranted ?? false;
+
+    return Card(
+      color: theme.colorScheme.errorContainer.withValues(alpha: 0.55),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(
+                  Icons.warning_amber_rounded,
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '提醒权限未开启完整',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: theme.colorScheme.onErrorContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '当前缺少：$missing。未授权时，到点后可能不会正常弹出提醒。',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onErrorContainer,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              fullScreenReady ? '全屏提醒权限：已授权' : '全屏提醒权限：建议授权，这样锁屏或后台时提醒会更明显。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onErrorContainer.withValues(
+                  alpha: 0.86,
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onPressed,
+              icon: const Icon(Icons.security),
+              label: const Text('检查并申请权限'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BackgroundKeepAliveNotice extends StatelessWidget {
+  const _BackgroundKeepAliveNotice({required this.onOpenGuide});
+
+  final Future<void> Function() onOpenGuide;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(
+                  Icons.shield_moon_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '清除后台后可能不提醒',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '部分 Android 系统会在你手动清除后台后停止应用，导致本地定时提醒失效。这通常不是 Flutter 通知代码本身能完全绕过的限制。',
+              style: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '建议把应用设为允许自启动、不限制后台、关闭省电优化，并尽量不要从最近任务里手动划掉它。',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: <Widget>[
+                FilledButton.icon(
+                  onPressed: onOpenGuide,
+                  icon: const Icon(Icons.menu_book_rounded),
+                  label: const Text('查看保活引导'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

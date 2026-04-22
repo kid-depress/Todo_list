@@ -7,11 +7,29 @@ import 'package:my_todo_test/services/notification_service.dart';
 import 'package:my_todo_test/todo_app.dart';
 
 class FakeNotificationService extends NotificationService {
+  int syncCount = 0;
+
   @override
   Future<void> initialize() async {}
 
   @override
-  Future<void> syncTodos(List<TodoItem> todos) async {}
+  Future<NotificationPermissionStatus> getPermissionStatusWithAutoStart({
+    required bool autoStartGranted,
+    required bool unrestrictedBackgroundGranted,
+  }) async {
+    return NotificationPermissionStatus(
+      notificationsGranted: true,
+      exactAlarmsGranted: true,
+      unrestrictedBackgroundGranted: unrestrictedBackgroundGranted,
+      batteryOptimizationDisabled: true,
+      autoStartGranted: autoStartGranted,
+    );
+  }
+
+  @override
+  Future<void> syncTodos(List<TodoItem> todos) async {
+    syncCount += 1;
+  }
 }
 
 void main() {
@@ -21,14 +39,30 @@ void main() {
   });
 
   testWidgets('renders todo home', (WidgetTester tester) async {
+    final FakeNotificationService notificationService =
+        FakeNotificationService();
     await tester.pumpWidget(
       TodoApp(
-        notificationService: FakeNotificationService(),
+        notificationService: notificationService,
       ),
     );
     await tester.pump();
 
     expect(find.text('待办提醒'), findsWidgets);
     expect(find.text('新建'), findsOneWidget);
+    expect(notificationService.syncCount, greaterThan(0));
+  });
+
+  test('can schedule reminders before keepalive guidance is confirmed', () {
+    const NotificationPermissionStatus status = NotificationPermissionStatus(
+      notificationsGranted: true,
+      exactAlarmsGranted: true,
+      unrestrictedBackgroundGranted: false,
+      batteryOptimizationDisabled: true,
+      autoStartGranted: false,
+    );
+
+    expect(status.canScheduleReminders, isTrue);
+    expect(status.allRequiredGranted, isFalse);
   });
 }
