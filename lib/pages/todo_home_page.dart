@@ -42,10 +42,8 @@ class _TodoHomePageState extends State<TodoHomePage> {
     _storage = widget.storage ?? TodoStorage();
     _notificationService = widget.notificationService ?? NotificationService();
     _ownsNotificationService = widget.notificationService == null;
-    _notificationSubscription =
-        _notificationService.notificationSelectionStream.listen(
-      _handleNotificationSelection,
-    );
+    _notificationSubscription = _notificationService.notificationSelectionStream
+        .listen(_handleNotificationSelection);
     unawaited(_bootstrap());
   }
 
@@ -63,13 +61,13 @@ class _TodoHomePageState extends State<TodoHomePage> {
     final List<TodoItem> todos = await _storage.loadTodos();
     final int nextId = await _storage.loadNextId();
     final bool autoStartConfirmed = await _storage.loadAutoStartConfirmed();
-    final bool unrestrictedBackgroundConfirmed =
-        await _storage.loadUnrestrictedBackgroundConfirmed();
+    final bool unrestrictedBackgroundConfirmed = await _storage
+        .loadUnrestrictedBackgroundConfirmed();
     final NotificationPermissionStatus permissionStatus =
         await _notificationService.getPermissionStatusWithAutoStart(
-      autoStartGranted: autoStartConfirmed,
-      unrestrictedBackgroundGranted: unrestrictedBackgroundConfirmed,
-    );
+          autoStartGranted: autoStartConfirmed,
+          unrestrictedBackgroundGranted: unrestrictedBackgroundConfirmed,
+        );
 
     if (!mounted) return;
 
@@ -98,11 +96,11 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 
   Future<void> _ensureReminderPermissions() async {
-    final NotificationPermissionStatus status =
-        await _notificationService.ensurePermissionsWithAutoStart(
-      autoStartGranted: _autoStartConfirmed,
-      unrestrictedBackgroundGranted: _unrestrictedBackgroundConfirmed,
-    );
+    final NotificationPermissionStatus status = await _notificationService
+        .ensurePermissionsWithAutoStart(
+          autoStartGranted: _autoStartConfirmed,
+          unrestrictedBackgroundGranted: _unrestrictedBackgroundConfirmed,
+        );
     if (!mounted) return;
 
     setState(() {
@@ -112,9 +110,9 @@ class _TodoHomePageState extends State<TodoHomePage> {
     final String message = status.allRequiredGranted
         ? '提醒权限已开启，可以正常接收提醒'
         : '仍缺少：${status.missingRequiredPermissions.join('、')}';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
 
     if (status.canScheduleReminders) {
       await _notificationService.syncTodos(_todos);
@@ -141,11 +139,11 @@ class _TodoHomePageState extends State<TodoHomePage> {
       unrestrictedBackgroundConfirmed,
     );
 
-    final NotificationPermissionStatus status =
-        await _notificationService.getPermissionStatusWithAutoStart(
-      autoStartGranted: autoStartConfirmed,
-      unrestrictedBackgroundGranted: unrestrictedBackgroundConfirmed,
-    );
+    final NotificationPermissionStatus status = await _notificationService
+        .getPermissionStatusWithAutoStart(
+          autoStartGranted: autoStartConfirmed,
+          unrestrictedBackgroundGranted: unrestrictedBackgroundConfirmed,
+        );
 
     if (!mounted) return;
 
@@ -221,10 +219,10 @@ class _TodoHomePageState extends State<TodoHomePage> {
       TodoFilter.completed =>
         _todos.where((TodoItem item) => item.completed).toList(),
       TodoFilter.today => _todos.where((TodoItem item) {
-          return !item.completed &&
-              item.dueAt != null &&
-              _isSameDay(item.dueAt!, now);
-        }).toList(),
+        return !item.completed &&
+            item.dueAt != null &&
+            _isSameDay(item.dueAt!, now);
+      }).toList(),
     };
 
     filtered.sort((TodoItem a, TodoItem b) {
@@ -375,87 +373,92 @@ class _TodoHomePageState extends State<TodoHomePage> {
               : RefreshIndicator(
                   onRefresh: _reload,
                   child: LayoutBuilder(
-                    builder: (BuildContext context, BoxConstraints constraints) {
-                      final bool wide = constraints.maxWidth >= 840;
-                      final EdgeInsets padding = EdgeInsets.fromLTRB(
-                        wide ? 28 : 16,
-                        14,
-                        wide ? 28 : 16,
-                        104,
-                      );
+                    builder:
+                        (BuildContext context, BoxConstraints constraints) {
+                          final bool wide = constraints.maxWidth >= 840;
+                          final EdgeInsets padding = EdgeInsets.fromLTRB(
+                            wide ? 28 : 16,
+                            14,
+                            wide ? 28 : 16,
+                            104,
+                          );
 
-                      if (wide) {
-                        return ListView(
-                          padding: padding,
-                          children: <Widget>[
-                            Center(
-                              child: ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(maxWidth: 1180),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: <Widget>[
-                                    SizedBox(
-                                      width: 340,
-                                      child: _DashboardRail(
-                                        pendingCount: _pendingCount,
-                                        todayCount: _todayTodos.length,
-                                        completedCount: _completedTodos.length,
-                                        permissionStatus: _permissionStatus,
-                                        onAdd: () => _openEditor(),
-                                        onCheckPermissions:
-                                            _ensureReminderPermissions,
-                                        onOpenKeepAliveGuide:
-                                            _openKeepAliveGuide,
-                                      ),
+                          if (wide) {
+                            return ListView(
+                              padding: padding,
+                              children: <Widget>[
+                                Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 1180,
                                     ),
-                                    const SizedBox(width: 20),
-                                    Expanded(
-                                      child: _TaskSurface(
-                                        filter: _filter,
-                                        todos: visibleTodos,
-                                        onFilterChanged: (TodoFilter value) {
-                                          setState(() => _filter = value);
-                                        },
-                                        onOpenEditor: _openEditor,
-                                        onToggleCompleted: _toggleCompleted,
-                                        onDeleteTodo: _deleteTodo,
-                                      ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: <Widget>[
+                                        SizedBox(
+                                          width: 340,
+                                          child: _DashboardRail(
+                                            pendingCount: _pendingCount,
+                                            todayCount: _todayTodos.length,
+                                            completedCount:
+                                                _completedTodos.length,
+                                            permissionStatus: _permissionStatus,
+                                            onCheckPermissions:
+                                                _ensureReminderPermissions,
+                                            onOpenKeepAliveGuide:
+                                                _openKeepAliveGuide,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 20),
+                                        Expanded(
+                                          child: _TaskSurface(
+                                            filter: _filter,
+                                            todos: visibleTodos,
+                                            onFilterChanged:
+                                                (TodoFilter value) {
+                                                  setState(
+                                                    () => _filter = value,
+                                                  );
+                                                },
+                                            onOpenEditor: _openEditor,
+                                            onToggleCompleted: _toggleCompleted,
+                                            onDeleteTodo: _deleteTodo,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                            ),
-                          ],
-                        );
-                      }
+                              ],
+                            );
+                          }
 
-                      return ListView(
-                        padding: padding,
-                        children: <Widget>[
-                          _DashboardRail(
-                            pendingCount: _pendingCount,
-                            todayCount: _todayTodos.length,
-                            completedCount: _completedTodos.length,
-                            permissionStatus: _permissionStatus,
-                            onAdd: () => _openEditor(),
-                            onCheckPermissions: _ensureReminderPermissions,
-                            onOpenKeepAliveGuide: _openKeepAliveGuide,
-                          ),
-                          const SizedBox(height: 16),
-                          _TaskSurface(
-                            filter: _filter,
-                            todos: visibleTodos,
-                            onFilterChanged: (TodoFilter value) {
-                              setState(() => _filter = value);
-                            },
-                            onOpenEditor: _openEditor,
-                            onToggleCompleted: _toggleCompleted,
-                            onDeleteTodo: _deleteTodo,
-                          ),
-                        ],
-                      );
-                    },
+                          return ListView(
+                            padding: padding,
+                            children: <Widget>[
+                              _DashboardRail(
+                                pendingCount: _pendingCount,
+                                todayCount: _todayTodos.length,
+                                completedCount: _completedTodos.length,
+                                permissionStatus: _permissionStatus,
+                                onCheckPermissions: _ensureReminderPermissions,
+                                onOpenKeepAliveGuide: _openKeepAliveGuide,
+                              ),
+                              const SizedBox(height: 16),
+                              _TaskSurface(
+                                filter: _filter,
+                                todos: visibleTodos,
+                                onFilterChanged: (TodoFilter value) {
+                                  setState(() => _filter = value);
+                                },
+                                onOpenEditor: _openEditor,
+                                onToggleCompleted: _toggleCompleted,
+                                onDeleteTodo: _deleteTodo,
+                              ),
+                            ],
+                          );
+                        },
                   ),
                 ),
         ),
@@ -482,7 +485,6 @@ class _DashboardRail extends StatelessWidget {
     required this.todayCount,
     required this.completedCount,
     required this.permissionStatus,
-    required this.onAdd,
     required this.onCheckPermissions,
     required this.onOpenKeepAliveGuide,
   });
@@ -491,7 +493,6 @@ class _DashboardRail extends StatelessWidget {
   final int todayCount;
   final int completedCount;
   final NotificationPermissionStatus? permissionStatus;
-  final VoidCallback onAdd;
   final Future<void> Function() onCheckPermissions;
   final Future<void> Function() onOpenKeepAliveGuide;
 
@@ -520,12 +521,6 @@ class _DashboardRail extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Icon(
-                Icons.task_alt_rounded,
-                color: theme.colorScheme.onPrimary,
-                size: 34,
-              ),
-              const SizedBox(height: 28),
               Text(
                 '安排今天，\n也照顾稍后的自己。',
                 style: theme.textTheme.headlineSmall?.copyWith(
@@ -541,12 +536,6 @@ class _DashboardRail extends StatelessWidget {
                   color: theme.colorScheme.onPrimary.withValues(alpha: 0.78),
                   height: 1.45,
                 ),
-              ),
-              const SizedBox(height: 24),
-              FilledButton.tonalIcon(
-                onPressed: onAdd,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('添加任务'),
               ),
             ],
           ),
@@ -733,21 +722,11 @@ class _TaskSurface extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    _titleFor(filter),
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                IconButton.filledTonal(
-                  onPressed: () => onOpenEditor(),
-                  icon: const Icon(Icons.add_rounded),
-                ),
-              ],
+            Text(
+              _titleFor(filter),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
             ),
             const SizedBox(height: 12),
             SegmentedButton<TodoFilter>(
@@ -821,7 +800,9 @@ class _TaskCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final bool overdue =
-        !item.completed && item.dueAt != null && item.dueAt!.isBefore(DateTime.now());
+        !item.completed &&
+        item.dueAt != null &&
+        item.dueAt!.isBefore(DateTime.now());
 
     return Material(
       color: item.completed
@@ -876,15 +857,15 @@ class _TaskCard extends StatelessWidget {
                           },
                           itemBuilder: (BuildContext context) =>
                               const <PopupMenuEntry<String>>[
-                            PopupMenuItem<String>(
-                              value: 'edit',
-                              child: Text('编辑'),
-                            ),
-                            PopupMenuItem<String>(
-                              value: 'delete',
-                              child: Text('删除'),
-                            ),
-                          ],
+                                PopupMenuItem<String>(
+                                  value: 'edit',
+                                  child: Text('编辑'),
+                                ),
+                                PopupMenuItem<String>(
+                                  value: 'delete',
+                                  child: Text('删除'),
+                                ),
+                              ],
                         ),
                       ],
                     ),
@@ -982,16 +963,14 @@ class _EmptyState extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.36),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.36,
+        ),
         borderRadius: BorderRadius.circular(28),
       ),
       child: Column(
         children: <Widget>[
-          Icon(
-            Icons.inbox_rounded,
-            size: 48,
-            color: theme.colorScheme.primary,
-          ),
+          Icon(Icons.inbox_rounded, size: 48, color: theme.colorScheme.primary),
           const SizedBox(height: 14),
           Text(
             '这里很清爽',
