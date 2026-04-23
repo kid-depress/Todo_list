@@ -22,8 +22,7 @@ class NotificationPermissionStatus {
   final bool autoStartGranted;
   final bool? fullScreenIntentGranted;
 
-  bool get canScheduleReminders =>
-      notificationsGranted && exactAlarmsGranted;
+  bool get canScheduleReminders => notificationsGranted && exactAlarmsGranted;
 
   bool get allRequiredGranted =>
       canScheduleReminders &&
@@ -55,10 +54,12 @@ class NotificationPermissionStatus {
 class NotificationService {
   NotificationService();
 
-  static const MethodChannel _alarmMethodChannel =
-      MethodChannel('todo_alarm_manager/methods');
-  static const EventChannel _alarmSelectionChannel =
-      EventChannel('todo_alarm_manager/selections');
+  static const MethodChannel _alarmMethodChannel = MethodChannel(
+    'todo_alarm_manager/methods',
+  );
+  static const EventChannel _alarmSelectionChannel = EventChannel(
+    'todo_alarm_manager/selections',
+  );
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -137,13 +138,21 @@ class NotificationService {
             'title': item.title,
             'notes': item.notes,
             'triggerAtMillis': item.dueAt!.millisecondsSinceEpoch,
+            'ringOnReminder': item.ringOnReminder,
           };
         })
         .toList();
 
+    await _alarmMethodChannel.invokeMethod<void>('syncTodos', <String, Object?>{
+      'todos': reminders,
+    });
+  }
+
+  Future<void> stopRingtone(int todoId) async {
+    await initialize();
     await _alarmMethodChannel.invokeMethod<void>(
-      'syncTodos',
-      <String, Object?>{'todos': reminders},
+      'stopRingtone',
+      <String, Object?>{'todoId': todoId},
     );
   }
 

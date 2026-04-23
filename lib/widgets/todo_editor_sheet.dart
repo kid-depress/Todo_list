@@ -1,13 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../models/todo_draft.dart';
 import '../models/todo_item.dart';
 
 class TodoEditorSheet extends StatefulWidget {
-  const TodoEditorSheet({
-    required this.initialItem,
-    super.key,
-  });
+  const TodoEditorSheet({required this.initialItem, super.key});
 
   final TodoItem? initialItem;
 
@@ -20,13 +17,19 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
   late final TextEditingController _titleController;
   late final TextEditingController _notesController;
   DateTime? _dueAt;
+  late bool _ringOnReminder;
 
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController(text: widget.initialItem?.title ?? '');
-    _notesController = TextEditingController(text: widget.initialItem?.notes ?? '');
+    _titleController = TextEditingController(
+      text: widget.initialItem?.title ?? '',
+    );
+    _notesController = TextEditingController(
+      text: widget.initialItem?.notes ?? '',
+    );
     _dueAt = widget.initialItem?.dueAt;
+    _ringOnReminder = widget.initialItem?.ringOnReminder ?? false;
   }
 
   @override
@@ -37,12 +40,14 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
   }
 
   Future<void> _pickDate() async {
-    final DateTime seed = _dueAt ?? DateTime.now().add(const Duration(hours: 1));
+    final DateTime seed =
+        _dueAt ?? DateTime.now().add(const Duration(hours: 1));
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: seed,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
+      locale: const Locale('zh', 'CN'),
     );
     if (picked == null) return;
     setState(() {
@@ -57,7 +62,8 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
   }
 
   Future<void> _pickTime() async {
-    final DateTime seed = _dueAt ?? DateTime.now().add(const Duration(hours: 1));
+    final DateTime seed =
+        _dueAt ?? DateTime.now().add(const Duration(hours: 1));
     final TimeOfDay? picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(seed),
@@ -65,12 +71,21 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
     if (picked == null) return;
     setState(() {
       final DateTime base = _dueAt ?? seed;
-      _dueAt = DateTime(base.year, base.month, base.day, picked.hour, picked.minute);
+      _dueAt = DateTime(
+        base.year,
+        base.month,
+        base.day,
+        picked.hour,
+        picked.minute,
+      );
     });
   }
 
   void _clearDueAt() {
-    setState(() => _dueAt = null);
+    setState(() {
+      _dueAt = null;
+      _ringOnReminder = false;
+    });
   }
 
   void _save() {
@@ -80,6 +95,7 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
         title: _titleController.text,
         notes: _notesController.text,
         dueAt: _dueAt,
+        ringOnReminder: _dueAt != null && _ringOnReminder,
       ),
     );
   }
@@ -87,14 +103,12 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final TextStyle chipLabelStyle = theme.textTheme.labelLarge?.copyWith(
+    final TextStyle chipLabelStyle =
+        theme.textTheme.labelLarge?.copyWith(
           color: Colors.black87,
           fontWeight: FontWeight.w600,
         ) ??
-        const TextStyle(
-          color: Colors.black87,
-          fontWeight: FontWeight.w600,
-        );
+        const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600);
     final String dueText = _dueAt == null
         ? '未设置'
         : '${_dueAt!.year}/${_dueAt!.month.toString().padLeft(2, '0')}/${_dueAt!.day.toString().padLeft(2, '0')} ${_dueAt!.hour.toString().padLeft(2, '0')}:${_dueAt!.minute.toString().padLeft(2, '0')}';
@@ -136,7 +150,9 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
                   const SizedBox(height: 18),
                   Text(
                     widget.initialItem == null ? '新建待办' : '编辑待办',
-                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   const SizedBox(height: 18),
                   TextFormField(
@@ -168,7 +184,9 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
                   const SizedBox(height: 16),
                   Text(
                     '提醒时间',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -180,7 +198,9 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
                         label: Text('选择日期', style: chipLabelStyle),
                         labelStyle: chipLabelStyle,
                         backgroundColor: theme.colorScheme.surface,
-                        side: BorderSide(color: theme.colorScheme.outlineVariant),
+                        side: BorderSide(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
                         onPressed: _pickDate,
                       ),
                       ActionChip(
@@ -188,7 +208,9 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
                         label: Text('选择时间', style: chipLabelStyle),
                         labelStyle: chipLabelStyle,
                         backgroundColor: theme.colorScheme.surface,
-                        side: BorderSide(color: theme.colorScheme.outlineVariant),
+                        side: BorderSide(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
                         onPressed: _pickTime,
                       ),
                       if (_dueAt != null)
@@ -197,7 +219,9 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
                           label: Text('清除提醒', style: chipLabelStyle),
                           labelStyle: chipLabelStyle,
                           backgroundColor: theme.colorScheme.surface,
-                          side: BorderSide(color: theme.colorScheme.outlineVariant),
+                          side: BorderSide(
+                            color: theme.colorScheme.outlineVariant,
+                          ),
                           onPressed: _clearDueAt,
                         ),
                     ],
@@ -209,6 +233,24 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
                       title: const Text('当前设置'),
                       subtitle: Text(dueText),
                     ),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: Icon(
+                      _ringOnReminder
+                          ? Icons.notifications_active_rounded
+                          : Icons.notifications_off_outlined,
+                    ),
+                    title: const Text('提醒时响铃'),
+                    subtitle: Text(
+                      _ringOnReminder ? '到点后播放系统提醒铃声' : '只发送通知，不播放铃声',
+                    ),
+                    value: _ringOnReminder,
+                    onChanged: _dueAt == null
+                        ? null
+                        : (bool value) {
+                            setState(() => _ringOnReminder = value);
+                          },
                   ),
                   const SizedBox(height: 20),
                   Row(

@@ -1,9 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'pages/todo_home_page.dart';
 import 'services/notification_service.dart';
 import 'services/todo_storage.dart';
-import 'theme/app_theme.dart';
 
 class TodoApp extends StatelessWidget {
   const TodoApp({
@@ -17,15 +17,25 @@ class TodoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ColorScheme colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF0F766E),
-      brightness: Brightness.light,
-    );
-
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
       title: '待办提醒',
-      theme: buildAppTheme(colorScheme),
+      debugShowCheckedModeBanner: false,
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: const <Locale>[
+        Locale('zh', 'CN'),
+        Locale('en', 'US'),
+      ],
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF2F7D6D),
+        ),
+        useMaterial3: true,
+      ),
       home: TodoHomePage(
         storage: storage,
         notificationService: notificationService,

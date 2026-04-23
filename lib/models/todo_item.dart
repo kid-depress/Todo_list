@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 
 class TodoItem {
   const TodoItem({
@@ -8,7 +8,10 @@ class TodoItem {
     this.notes = '',
     this.dueAt,
     this.completed = false,
+    this.ringOnReminder = false,
   });
+
+  static const Object _unset = Object();
 
   final int id;
   final String title;
@@ -16,33 +19,37 @@ class TodoItem {
   final DateTime createdAt;
   final DateTime? dueAt;
   final bool completed;
+  final bool ringOnReminder;
 
   TodoItem copyWith({
     int? id,
     String? title,
     String? notes,
     DateTime? createdAt,
-    DateTime? dueAt,
+    Object? dueAt = _unset,
     bool? completed,
+    bool? ringOnReminder,
   }) {
     return TodoItem(
       id: id ?? this.id,
       title: title ?? this.title,
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,
-      dueAt: dueAt ?? this.dueAt,
+      dueAt: identical(dueAt, _unset) ? this.dueAt : dueAt as DateTime?,
       completed: completed ?? this.completed,
+      ringOnReminder: ringOnReminder ?? this.ringOnReminder,
     );
   }
 
   Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'title': title,
-        'notes': notes,
-        'createdAt': createdAt.toIso8601String(),
-        'dueAt': dueAt?.toIso8601String(),
-        'completed': completed,
-      };
+    'id': id,
+    'title': title,
+    'notes': notes,
+    'createdAt': createdAt.toIso8601String(),
+    'dueAt': dueAt?.toIso8601String(),
+    'completed': completed,
+    'ringOnReminder': ringOnReminder,
+  };
 
   factory TodoItem.fromJson(Map<String, dynamic> json) {
     return TodoItem(
@@ -50,9 +57,11 @@ class TodoItem {
       title: json['title'] as String? ?? '',
       notes: json['notes'] as String? ?? '',
       createdAt:
-          DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
       dueAt: DateTime.tryParse(json['dueAt'] as String? ?? ''),
       completed: json['completed'] as bool? ?? false,
+      ringOnReminder: json['ringOnReminder'] as bool? ?? false,
     );
   }
 
@@ -70,15 +79,12 @@ class TodoItem {
       return <TodoItem>[];
     }
 
-    return decoded
-        .whereType<Map>()
-        .map((Map<dynamic, dynamic> json) {
-          return TodoItem.fromJson(
-            json.map((dynamic key, dynamic value) {
-              return MapEntry<String, dynamic>(key.toString(), value);
-            }),
-          );
-        })
-        .toList();
+    return decoded.whereType<Map>().map((Map<dynamic, dynamic> json) {
+      return TodoItem.fromJson(
+        json.map((dynamic key, dynamic value) {
+          return MapEntry<String, dynamic>(key.toString(), value);
+        }),
+      );
+    }).toList();
   }
 }

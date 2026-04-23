@@ -5,4 +5,5 @@ data class ReminderAlarmPayload(
     val title: String,
     val notes: String,
     val triggerAtMillis: Long,
+    val ringOnReminder: Boolean,
 )

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../models/todo_item.dart';
 
@@ -43,8 +43,9 @@ class TodoCard extends StatelessWidget {
                 child: Checkbox(
                   value: item.completed,
                   side: BorderSide(color: accentColor.withValues(alpha: 0.35)),
-                  fillColor:
-                      WidgetStateProperty.resolveWith((Set<WidgetState> states) {
+                  fillColor: WidgetStateProperty.resolveWith((
+                    Set<WidgetState> states,
+                  ) {
                     if (states.contains(WidgetState.selected)) {
                       return accentColor;
                     }
@@ -98,15 +99,15 @@ class TodoCard extends StatelessWidget {
                           },
                           itemBuilder: (BuildContext context) =>
                               const <PopupMenuEntry<String>>[
-                            PopupMenuItem<String>(
-                              value: 'edit',
-                              child: Text('编辑'),
-                            ),
-                            PopupMenuItem<String>(
-                              value: 'delete',
-                              child: Text('删除'),
-                            ),
-                          ],
+                                PopupMenuItem<String>(
+                                  value: 'edit',
+                                  child: Text('编辑'),
+                                ),
+                                PopupMenuItem<String>(
+                                  value: 'delete',
+                                  child: Text('删除'),
+                                ),
+                              ],
                         ),
                       ],
                     ),
@@ -131,8 +132,17 @@ class TodoCard extends StatelessWidget {
                           _DueChip(dueAt: item.dueAt!)
                         else
                           const _DueChip.empty(),
+                        if (item.dueAt != null && item.ringOnReminder)
+                          const _SimpleChip(
+                            icon: Icons.notifications_active_rounded,
+                            label: '响铃',
+                            filled: false,
+                          ),
                         if (item.completed)
-                          const _SimpleChip(icon: Icons.check_circle, label: '已完成'),
+                          const _SimpleChip(
+                            icon: Icons.check_circle,
+                            label: '已完成',
+                          ),
                         if (!item.completed && item.notes.isNotEmpty)
                           const _SimpleChip(
                             icon: Icons.edit_note_rounded,
@@ -155,9 +165,7 @@ class TodoCard extends StatelessWidget {
 class _DueChip extends StatelessWidget {
   const _DueChip({required this.dueAt}) : empty = false;
 
-  const _DueChip.empty()
-      : dueAt = null,
-        empty = true;
+  const _DueChip.empty() : dueAt = null, empty = true;
 
   final DateTime? dueAt;
   final bool empty;
@@ -174,16 +182,16 @@ class _DueChip extends StatelessWidget {
 
     final String text =
         '${dueAt!.month}/${dueAt!.day} ${dueAt!.hour.toString().padLeft(2, '0')}:${dueAt!.minute.toString().padLeft(2, '0')}';
-    return _SimpleChip(
-      icon: Icons.schedule,
-      label: text,
-      filled: false,
-    );
+    return _SimpleChip(icon: Icons.schedule, label: text, filled: false);
   }
 }
 
 class _SimpleChip extends StatelessWidget {
-  const _SimpleChip({required this.icon, required this.label, this.filled = false});
+  const _SimpleChip({
+    required this.icon,
+    required this.label,
+    this.filled = false,
+  });
 
   final IconData icon;
   final String label;

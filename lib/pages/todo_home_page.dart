@@ -192,10 +192,19 @@ class _TodoHomePageState extends State<TodoHomePage> {
         return;
       }
 
-      final bool? shouldOpen = await showDialog<bool>(
+      final bool? shouldOpen = await showModalBottomSheet<bool>(
         context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
         builder: (BuildContext context) {
-          return AlertDialog(
+          return Dismissible(
+            key: ValueKey<int>(latestItem.id),
+            direction: DismissDirection.down,
+            onDismissed: (_) => Navigator.of(context).pop(false),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: AlertDialog(
             title: const Text('提醒时间到了'),
             content: Text(
               latestItem.notes.trim().isEmpty
@@ -212,9 +221,13 @@ class _TodoHomePageState extends State<TodoHomePage> {
                 child: const Text('打开待办'),
               ),
             ],
+              ),
+            ),
           );
         },
       );
+
+      await _notificationService.stopRingtone(todoId);
 
       _pendingNotificationTodoId = null;
       _showingReminderDialog = false;
@@ -296,6 +309,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
       title: draft.title.trim(),
       notes: draft.notes.trim(),
       dueAt: draft.dueAt,
+      ringOnReminder: draft.ringOnReminder,
       createdAt: DateTime.now(),
     );
 
@@ -315,6 +329,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
           title: draft.title.trim(),
           notes: draft.notes.trim(),
           dueAt: draft.dueAt,
+          ringOnReminder: draft.ringOnReminder,
         );
       }).toList();
     });

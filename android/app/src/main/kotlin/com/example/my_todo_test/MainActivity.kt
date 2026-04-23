@@ -37,7 +37,18 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "consumeLaunchTodoId" -> {
-                    result.success(consumeTodoIdFromIntent(intent))
+                    result.success(
+                        consumeTodoIdFromIntent(intent)
+                            ?: TodoRingtoneService.activeTodoId(applicationContext),
+                    )
+                }
+
+                "stopRingtone" -> {
+                    val todoId = call.argument<Int>("todoId") ?: -1
+                    if (todoId >= 0) {
+                        TodoRingtoneService.stop(applicationContext, todoId)
+                    }
+                    result.success(null)
                 }
 
                 else -> result.notImplemented()
@@ -97,11 +108,13 @@ class MainActivity : FlutterActivity() {
         val triggerAtMillis = (raw["triggerAtMillis"] as? Number)?.toLong() ?: return null
         val title = raw["title"] as? String ?: ""
         val notes = raw["notes"] as? String ?: ""
+        val ringOnReminder = raw["ringOnReminder"] as? Boolean ?: false
         return ReminderAlarmPayload(
             id = id,
             title = title,
             notes = notes,
             triggerAtMillis = triggerAtMillis,
+            ringOnReminder = ringOnReminder,
         )
     }
 
