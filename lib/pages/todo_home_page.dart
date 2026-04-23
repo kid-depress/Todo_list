@@ -2,16 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'background_keepalive_guide_page.dart';
 import '../models/todo_draft.dart';
 import '../models/todo_filter.dart';
 import '../models/todo_item.dart';
 import '../services/notification_service.dart';
 import '../services/todo_storage.dart';
 import '../widgets/todo_editor_sheet.dart';
-import '../widgets/todo_filter_surface.dart';
-import '../widgets/todo_hero_panel.dart';
-import '../widgets/todo_sections.dart';
+import 'background_keepalive_guide_page.dart';
 
 class TodoHomePage extends StatefulWidget {
   const TodoHomePage({super.key, this.storage, this.notificationService});
@@ -45,8 +42,10 @@ class _TodoHomePageState extends State<TodoHomePage> {
     _storage = widget.storage ?? TodoStorage();
     _notificationService = widget.notificationService ?? NotificationService();
     _ownsNotificationService = widget.notificationService == null;
-    _notificationSubscription = _notificationService.notificationSelectionStream
-        .listen(_handleNotificationSelection);
+    _notificationSubscription =
+        _notificationService.notificationSelectionStream.listen(
+      _handleNotificationSelection,
+    );
     unawaited(_bootstrap());
   }
 
@@ -64,13 +63,13 @@ class _TodoHomePageState extends State<TodoHomePage> {
     final List<TodoItem> todos = await _storage.loadTodos();
     final int nextId = await _storage.loadNextId();
     final bool autoStartConfirmed = await _storage.loadAutoStartConfirmed();
-    final bool unrestrictedBackgroundConfirmed = await _storage
-        .loadUnrestrictedBackgroundConfirmed();
+    final bool unrestrictedBackgroundConfirmed =
+        await _storage.loadUnrestrictedBackgroundConfirmed();
     final NotificationPermissionStatus permissionStatus =
         await _notificationService.getPermissionStatusWithAutoStart(
-          autoStartGranted: autoStartConfirmed,
-          unrestrictedBackgroundGranted: unrestrictedBackgroundConfirmed,
-        );
+      autoStartGranted: autoStartConfirmed,
+      unrestrictedBackgroundGranted: unrestrictedBackgroundConfirmed,
+    );
 
     if (!mounted) return;
 
@@ -99,30 +98,27 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 
   Future<void> _ensureReminderPermissions() async {
-    final NotificationPermissionStatus status = await _notificationService
-        .ensurePermissionsWithAutoStart(
-          autoStartGranted: _autoStartConfirmed,
-          unrestrictedBackgroundGranted: _unrestrictedBackgroundConfirmed,
-        );
+    final NotificationPermissionStatus status =
+        await _notificationService.ensurePermissionsWithAutoStart(
+      autoStartGranted: _autoStartConfirmed,
+      unrestrictedBackgroundGranted: _unrestrictedBackgroundConfirmed,
+    );
     if (!mounted) return;
 
     setState(() {
       _permissionStatus = status;
     });
 
-    if (status.allRequiredGranted) {
-      await _notificationService.syncTodos(_todos);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('提醒权限已开启，可以正常接收闹铃提醒了')));
-      return;
-    }
+    final String message = status.allRequiredGranted
+        ? '提醒权限已开启，可以正常接收提醒'
+        : '仍缺少：${status.missingRequiredPermissions.join('、')}';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
 
-    final String missing = status.missingRequiredPermissions.join('、');
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('还缺少 $missing，请继续在系统页面中允许')));
+    if (status.canScheduleReminders) {
+      await _notificationService.syncTodos(_todos);
+    }
   }
 
   Future<void> _openKeepAliveGuide() async {
@@ -145,11 +141,11 @@ class _TodoHomePageState extends State<TodoHomePage> {
       unrestrictedBackgroundConfirmed,
     );
 
-    final NotificationPermissionStatus status = await _notificationService
-        .getPermissionStatusWithAutoStart(
-          autoStartGranted: autoStartConfirmed,
-          unrestrictedBackgroundGranted: unrestrictedBackgroundConfirmed,
-        );
+    final NotificationPermissionStatus status =
+        await _notificationService.getPermissionStatusWithAutoStart(
+      autoStartGranted: autoStartConfirmed,
+      unrestrictedBackgroundGranted: unrestrictedBackgroundConfirmed,
+    );
 
     if (!mounted) return;
 
@@ -198,31 +194,10 @@ class _TodoHomePageState extends State<TodoHomePage> {
         useSafeArea: true,
         backgroundColor: Colors.transparent,
         builder: (BuildContext context) {
-          return Dismissible(
-            key: ValueKey<int>(latestItem.id),
-            direction: DismissDirection.down,
-            onDismissed: (_) => Navigator.of(context).pop(false),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-              child: AlertDialog(
-            title: const Text('提醒时间到了'),
-            content: Text(
-              latestItem.notes.trim().isEmpty
-                  ? latestItem.title
-                  : '${latestItem.title}\n\n${latestItem.notes.trim()}',
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('知道了'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('打开待办'),
-              ),
-            ],
-              ),
-            ),
+          return _RingingReminderSheet(
+            item: latestItem,
+            onClose: () => Navigator.of(context).pop(false),
+            onOpen: () => Navigator.of(context).pop(true),
           );
         },
       );
@@ -246,10 +221,10 @@ class _TodoHomePageState extends State<TodoHomePage> {
       TodoFilter.completed =>
         _todos.where((TodoItem item) => item.completed).toList(),
       TodoFilter.today => _todos.where((TodoItem item) {
-        return !item.completed &&
-            item.dueAt != null &&
-            _isSameDay(item.dueAt!, now);
-      }).toList(),
+          return !item.completed &&
+              item.dueAt != null &&
+              _isSameDay(item.dueAt!, now);
+        }).toList(),
     };
 
     filtered.sort((TodoItem a, TodoItem b) {
@@ -266,27 +241,6 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
   int get _pendingCount =>
       _todos.where((TodoItem item) => !item.completed).length;
-
-  String get _dateLabel {
-    const List<String> weekdays = <String>[
-      '星期一',
-      '星期二',
-      '星期三',
-      '星期四',
-      '星期五',
-      '星期六',
-      '星期日',
-    ];
-    final DateTime now = DateTime.now();
-    return '${now.month}月${now.day}日 ${weekdays[now.weekday - 1]}';
-  }
-
-  String get _greeting {
-    final int hour = DateTime.now().hour;
-    if (hour < 11) return '早上好';
-    if (hour < 18) return '下午好';
-    return '晚上好';
-  }
 
   List<TodoItem> get _todayTodos {
     final DateTime now = DateTime.now();
@@ -381,101 +335,127 @@ class _TodoHomePageState extends State<TodoHomePage> {
     final List<TodoItem> visibleTodos = _visibleTodos;
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        toolbarHeight: 72,
-        titleSpacing: 16,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(
-              '待办提醒',
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-            Text(
-              '把今天要做的事，排得更清楚一点',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+        title: Text(
+          '任务提醒',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
         ),
+        actions: <Widget>[
+          IconButton.filledTonal(
+            onPressed: _ensureReminderPermissions,
+            icon: const Icon(Icons.notifications_active_outlined),
+            tooltip: '检查提醒权限',
+          ),
+          const SizedBox(width: 12),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openEditor(),
-        icon: const Icon(Icons.add),
-        label: const Text('新建'),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('新建任务'),
       ),
-      body: Container(
-        decoration: BoxDecoration(
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
             colors: <Color>[
-              const Color(0xFFF6FBFA),
-              theme.colorScheme.surface,
-              const Color(0xFFF2F6F8),
+              Color(0xFFF2EBDD),
+              Color(0xFFF7F5EF),
+              Color(0xFFE8F0EC),
             ],
           ),
         ),
         child: SafeArea(
-          bottom: false,
           child: _loading
               ? const Center(child: CircularProgressIndicator())
               : RefreshIndicator(
                   onRefresh: _reload,
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 900),
-                      child: ListView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                        children: <Widget>[
-                          if (_permissionStatus != null &&
-                              !_permissionStatus!
-                                  .allRequiredGranted) ...<Widget>[
-                            _PermissionNotice(
-                              status: _permissionStatus!,
-                              onPressed: _ensureReminderPermissions,
+                  child: LayoutBuilder(
+                    builder: (BuildContext context, BoxConstraints constraints) {
+                      final bool wide = constraints.maxWidth >= 840;
+                      final EdgeInsets padding = EdgeInsets.fromLTRB(
+                        wide ? 28 : 16,
+                        14,
+                        wide ? 28 : 16,
+                        104,
+                      );
+
+                      if (wide) {
+                        return ListView(
+                          padding: padding,
+                          children: <Widget>[
+                            Center(
+                              child: ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(maxWidth: 1180),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: <Widget>[
+                                    SizedBox(
+                                      width: 340,
+                                      child: _DashboardRail(
+                                        pendingCount: _pendingCount,
+                                        todayCount: _todayTodos.length,
+                                        completedCount: _completedTodos.length,
+                                        permissionStatus: _permissionStatus,
+                                        onAdd: () => _openEditor(),
+                                        onCheckPermissions:
+                                            _ensureReminderPermissions,
+                                        onOpenKeepAliveGuide:
+                                            _openKeepAliveGuide,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 20),
+                                    Expanded(
+                                      child: _TaskSurface(
+                                        filter: _filter,
+                                        todos: visibleTodos,
+                                        onFilterChanged: (TodoFilter value) {
+                                          setState(() => _filter = value);
+                                        },
+                                        onOpenEditor: _openEditor,
+                                        onToggleCompleted: _toggleCompleted,
+                                        onDeleteTodo: _deleteTodo,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                            const SizedBox(height: 16),
                           ],
-                          TodoHeroPanel(
-                            dateLabel: _dateLabel,
-                            greeting: _greeting,
+                        );
+                      }
+
+                      return ListView(
+                        padding: padding,
+                        children: <Widget>[
+                          _DashboardRail(
                             pendingCount: _pendingCount,
+                            todayCount: _todayTodos.length,
+                            completedCount: _completedTodos.length,
+                            permissionStatus: _permissionStatus,
                             onAdd: () => _openEditor(),
+                            onCheckPermissions: _ensureReminderPermissions,
+                            onOpenKeepAliveGuide: _openKeepAliveGuide,
                           ),
                           const SizedBox(height: 16),
-                          if (_permissionStatus != null &&
-                              !_permissionStatus!
-                                  .allRequiredGranted) ...<Widget>[
-                            _BackgroundKeepAliveNotice(
-                              onOpenGuide: _openKeepAliveGuide,
-                            ),
-                            const SizedBox(height: 16),
-                          ],
-                          TodoFilterSurface(
-                            selected: _filter,
-                            onSelectionChanged: (TodoFilter value) {
+                          _TaskSurface(
+                            filter: _filter,
+                            todos: visibleTodos,
+                            onFilterChanged: (TodoFilter value) {
                               setState(() => _filter = value);
                             },
-                          ),
-                          const SizedBox(height: 16),
-                          TodoSections(
-                            visibleTodos: visibleTodos,
-                            filter: _filter,
-                            todayTodos: _todayTodos,
-                            completedTodos: _completedTodos,
                             onOpenEditor: _openEditor,
                             onToggleCompleted: _toggleCompleted,
                             onDeleteTodo: _deleteTodo,
                           ),
                         ],
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 ),
         ),
@@ -496,65 +476,155 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 }
 
-class _PermissionNotice extends StatelessWidget {
-  const _PermissionNotice({required this.status, required this.onPressed});
+class _DashboardRail extends StatelessWidget {
+  const _DashboardRail({
+    required this.pendingCount,
+    required this.todayCount,
+    required this.completedCount,
+    required this.permissionStatus,
+    required this.onAdd,
+    required this.onCheckPermissions,
+    required this.onOpenKeepAliveGuide,
+  });
 
-  final NotificationPermissionStatus status;
-  final Future<void> Function() onPressed;
+  final int pendingCount;
+  final int todayCount;
+  final int completedCount;
+  final NotificationPermissionStatus? permissionStatus;
+  final VoidCallback onAdd;
+  final Future<void> Function() onCheckPermissions;
+  final Future<void> Function() onOpenKeepAliveGuide;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    final String missing = status.missingRequiredPermissions.join('、');
-    final bool fullScreenReady = status.fullScreenIntentGranted ?? false;
+    final bool needsAttention =
+        permissionStatus != null && !permissionStatus!.allRequiredGranted;
 
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary,
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: <BoxShadow>[
+              BoxShadow(
+                color: theme.colorScheme.primary.withValues(alpha: 0.24),
+                blurRadius: 32,
+                offset: const Offset(0, 18),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(
+                Icons.task_alt_rounded,
+                color: theme.colorScheme.onPrimary,
+                size: 34,
+              ),
+              const SizedBox(height: 28),
+              Text(
+                '安排今天，\n也照顾稍后的自己。',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: theme.colorScheme.onPrimary,
+                  fontWeight: FontWeight.w900,
+                  height: 1.12,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '可为重要任务开启响铃，到点前 5 分钟会先通知，你也可以提前关闭本次响铃。',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onPrimary.withValues(alpha: 0.78),
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.tonalIcon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('添加任务'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: _MetricCard(
+                label: '待办',
+                value: pendingCount,
+                icon: Icons.radio_button_unchecked_rounded,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _MetricCard(
+                label: '今天',
+                value: todayCount,
+                icon: Icons.today_rounded,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _MetricCard(
+                label: '完成',
+                value: completedCount,
+                icon: Icons.done_all_rounded,
+              ),
+            ),
+          ],
+        ),
+        if (needsAttention) ...<Widget>[
+          const SizedBox(height: 14),
+          _PermissionCard(
+            status: permissionStatus!,
+            onCheckPermissions: onCheckPermissions,
+            onOpenKeepAliveGuide: onOpenKeepAliveGuide,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final int value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
     return Card(
-      color: theme.colorScheme.errorContainer.withValues(alpha: 0.55),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
-              children: <Widget>[
-                Icon(
-                  Icons.warning_amber_rounded,
-                  color: theme.colorScheme.onErrorContainer,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '提醒权限未开启完整',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: theme.colorScheme.onErrorContainer,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
+            Icon(icon, color: theme.colorScheme.primary),
+            const SizedBox(height: 12),
             Text(
-              '当前缺少：$missing。未授权时，到点后可能不会正常弹出提醒。',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onErrorContainer,
-                height: 1.4,
+              '$value',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w900,
               ),
             ),
-            const SizedBox(height: 8),
             Text(
-              fullScreenReady ? '全屏提醒权限：已授权' : '全屏提醒权限：建议授权，这样锁屏或后台时提醒会更明显。',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onErrorContainer.withValues(
-                  alpha: 0.86,
-                ),
+              label,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-            ),
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: onPressed,
-              icon: const Icon(Icons.security),
-              label: const Text('检查并申请权限'),
             ),
           ],
         ),
@@ -563,32 +633,41 @@ class _PermissionNotice extends StatelessWidget {
   }
 }
 
-class _BackgroundKeepAliveNotice extends StatelessWidget {
-  const _BackgroundKeepAliveNotice({required this.onOpenGuide});
+class _PermissionCard extends StatelessWidget {
+  const _PermissionCard({
+    required this.status,
+    required this.onCheckPermissions,
+    required this.onOpenKeepAliveGuide,
+  });
 
-  final Future<void> Function() onOpenGuide;
+  final NotificationPermissionStatus status;
+  final Future<void> Function() onCheckPermissions;
+  final Future<void> Function() onOpenKeepAliveGuide;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final String missing = status.missingRequiredPermissions.join('、');
 
     return Card(
+      color: theme.colorScheme.errorContainer.withValues(alpha: 0.84),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Row(
               children: <Widget>[
                 Icon(
-                  Icons.shield_moon_outlined,
-                  color: theme.colorScheme.primary,
+                  Icons.notification_important_rounded,
+                  color: theme.colorScheme.onErrorContainer,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '清除后台后可能不提醒',
+                    '提醒权限需要确认',
                     style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.colorScheme.onErrorContainer,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -597,30 +676,444 @@ class _BackgroundKeepAliveNotice extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              '部分 Android 系统会在你手动清除后台后停止应用，导致本地定时提醒失效。这通常不是 Flutter 通知代码本身能完全绕过的限制。',
-              style: theme.textTheme.bodyMedium?.copyWith(height: 1.45),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              '建议把应用设为允许自启动、不限制后台、关闭省电优化，并尽量不要从最近任务里手动划掉它。',
+              '当前缺少：$missing。建议开启通知、精确闹钟和后台保活，避免错过提醒。',
               style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.45,
+                color: theme.colorScheme.onErrorContainer,
+                height: 1.4,
               ),
             ),
             const SizedBox(height: 14),
             Wrap(
-              spacing: 12,
-              runSpacing: 12,
+              spacing: 10,
+              runSpacing: 10,
               children: <Widget>[
                 FilledButton.icon(
-                  onPressed: onOpenGuide,
+                  onPressed: onCheckPermissions,
+                  icon: const Icon(Icons.security_rounded),
+                  label: const Text('检查权限'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onOpenKeepAliveGuide,
                   icon: const Icon(Icons.menu_book_rounded),
-                  label: const Text('查看保活引导'),
+                  label: const Text('保活引导'),
                 ),
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TaskSurface extends StatelessWidget {
+  const _TaskSurface({
+    required this.filter,
+    required this.todos,
+    required this.onFilterChanged,
+    required this.onOpenEditor,
+    required this.onToggleCompleted,
+    required this.onDeleteTodo,
+  });
+
+  final TodoFilter filter;
+  final List<TodoItem> todos;
+  final ValueChanged<TodoFilter> onFilterChanged;
+  final Future<void> Function({TodoItem? item}) onOpenEditor;
+  final Future<void> Function(TodoItem item, bool completed) onToggleCompleted;
+  final Future<void> Function(TodoItem item) onDeleteTodo;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    _titleFor(filter),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                IconButton.filledTonal(
+                  onPressed: () => onOpenEditor(),
+                  icon: const Icon(Icons.add_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<TodoFilter>(
+              segments: const <ButtonSegment<TodoFilter>>[
+                ButtonSegment<TodoFilter>(
+                  value: TodoFilter.pending,
+                  label: Text('待办'),
+                  icon: Icon(Icons.radio_button_unchecked_rounded),
+                ),
+                ButtonSegment<TodoFilter>(
+                  value: TodoFilter.today,
+                  label: Text('今天'),
+                  icon: Icon(Icons.today_rounded),
+                ),
+                ButtonSegment<TodoFilter>(
+                  value: TodoFilter.completed,
+                  label: Text('完成'),
+                  icon: Icon(Icons.done_all_rounded),
+                ),
+              ],
+              selected: <TodoFilter>{filter},
+              onSelectionChanged: (Set<TodoFilter> values) {
+                onFilterChanged(values.first);
+              },
+            ),
+            const SizedBox(height: 16),
+            if (todos.isEmpty)
+              const _EmptyState()
+            else
+              ...todos.map((TodoItem item) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _TaskCard(
+                    item: item,
+                    onTap: () => onOpenEditor(item: item),
+                    onToggle: (bool completed) =>
+                        onToggleCompleted(item, completed),
+                    onDelete: () => onDeleteTodo(item),
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _titleFor(TodoFilter filter) {
+    return switch (filter) {
+      TodoFilter.pending => '待办任务',
+      TodoFilter.today => '今天提醒',
+      TodoFilter.completed => '已完成',
+    };
+  }
+}
+
+class _TaskCard extends StatelessWidget {
+  const _TaskCard({
+    required this.item,
+    required this.onTap,
+    required this.onToggle,
+    required this.onDelete,
+  });
+
+  final TodoItem item;
+  final VoidCallback onTap;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final bool overdue =
+        !item.completed && item.dueAt != null && item.dueAt!.isBefore(DateTime.now());
+
+    return Material(
+      color: item.completed
+          ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.42)
+          : theme.colorScheme.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(26),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(26),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Checkbox(
+                value: item.completed,
+                onChanged: (bool? value) {
+                  if (value != null) {
+                    onToggle(value);
+                  }
+                },
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            item.title,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              decoration: item.completed
+                                  ? TextDecoration.lineThrough
+                                  : TextDecoration.none,
+                              color: item.completed
+                                  ? theme.colorScheme.onSurfaceVariant
+                                  : theme.colorScheme.onSurface,
+                            ),
+                          ),
+                        ),
+                        PopupMenuButton<String>(
+                          onSelected: (String value) {
+                            if (value == 'edit') {
+                              onTap();
+                            } else if (value == 'delete') {
+                              onDelete();
+                            }
+                          },
+                          itemBuilder: (BuildContext context) =>
+                              const <PopupMenuEntry<String>>[
+                            PopupMenuItem<String>(
+                              value: 'edit',
+                              child: Text('编辑'),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'delete',
+                              child: Text('删除'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    if (item.notes.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 6),
+                      Text(
+                        item.notes,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        _InfoChip(
+                          icon: item.dueAt == null
+                              ? Icons.notifications_none_rounded
+                              : Icons.schedule_rounded,
+                          label: item.dueAt == null
+                              ? '未设置提醒'
+                              : _formatDueAt(item.dueAt!),
+                          urgent: overdue,
+                        ),
+                        if (item.dueAt != null && item.ringOnReminder)
+                          const _InfoChip(
+                            icon: Icons.notifications_active_rounded,
+                            label: '响铃',
+                          ),
+                        if (item.completed)
+                          const _InfoChip(
+                            icon: Icons.check_circle_rounded,
+                            label: '已完成',
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDueAt(DateTime dueAt) {
+    return '${dueAt.month}/${dueAt.day} ${dueAt.hour.toString().padLeft(2, '0')}:${dueAt.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  const _InfoChip({
+    required this.icon,
+    required this.label,
+    this.urgent = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool urgent;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final Color background = urgent
+        ? theme.colorScheme.errorContainer
+        : theme.colorScheme.secondaryContainer.withValues(alpha: 0.55);
+    final Color foreground = urgent
+        ? theme.colorScheme.onErrorContainer
+        : theme.colorScheme.onSecondaryContainer;
+
+    return Chip(
+      avatar: Icon(icon, size: 18, color: foreground),
+      label: Text(label),
+      backgroundColor: background,
+      labelStyle: theme.textTheme.labelMedium?.copyWith(color: foreground),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 20),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.36),
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Column(
+        children: <Widget>[
+          Icon(
+            Icons.inbox_rounded,
+            size: 48,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(height: 14),
+          Text(
+            '这里很清爽',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '添加一个任务，让提醒帮你记住重要的事。',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RingingReminderSheet extends StatelessWidget {
+  const _RingingReminderSheet({
+    required this.item,
+    required this.onClose,
+    required this.onOpen,
+  });
+
+  final TodoItem item;
+  final VoidCallback onClose;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Dismissible(
+      key: ValueKey<int>(item.id),
+      direction: DismissDirection.down,
+      onDismissed: (_) => onClose(),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Center(
+                  child: Container(
+                    width: 44,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.alarm_on_rounded,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '提醒时间到了',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  item.title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (item.notes.trim().isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 8),
+                  Text(
+                    item.notes.trim(),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                Text(
+                  '向下滑动可关闭闹钟',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: onClose,
+                        child: const Text('关闭闹钟'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: onOpen,
+                        child: const Text('打开任务'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

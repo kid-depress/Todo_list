@@ -17,6 +17,11 @@ class TodoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ColorScheme lightScheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF3F6F64),
+      brightness: Brightness.light,
+    );
+
     return MaterialApp(
       title: '待办提醒',
       debugShowCheckedModeBanner: false,
@@ -31,10 +36,57 @@ class TodoApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
       ],
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2F7D6D),
-        ),
         useMaterial3: true,
+        colorScheme: lightScheme,
+        scaffoldBackgroundColor: const Color(0xFFF5F2EA),
+        appBarTheme: AppBarTheme(
+          centerTitle: false,
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          foregroundColor: lightScheme.onSurface,
+          surfaceTintColor: Colors.transparent,
+        ),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          color: lightScheme.surface,
+          surfaceTintColor: lightScheme.surfaceTint,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
+          ),
+        ),
+        chipTheme: ChipThemeData(
+          side: BorderSide.none,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(64, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: lightScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(20),
+            borderSide: BorderSide(
+              color: lightScheme.primary,
+              width: 1.4,
+            ),
+          ),
+        ),
       ),
       home: TodoHomePage(
         storage: storage,
