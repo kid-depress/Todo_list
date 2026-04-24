@@ -48,8 +48,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('待办提醒'), findsWidgets);
-    expect(find.text('新建'), findsOneWidget);
+    expect(find.text('任务提醒'), findsOneWidget);
+    expect(find.text('新建任务'), findsOneWidget);
     expect(notificationService.syncCount, greaterThan(0));
   });
 

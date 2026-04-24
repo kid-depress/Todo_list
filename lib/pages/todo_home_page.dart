@@ -756,18 +756,12 @@ class _TaskSurface extends StatelessWidget {
             if (todos.isEmpty)
               const _EmptyState()
             else
-              ...todos.map((TodoItem item) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _TaskCard(
-                    item: item,
-                    onTap: () => onOpenEditor(item: item),
-                    onToggle: (bool completed) =>
-                        onToggleCompleted(item, completed),
-                    onDelete: () => onDeleteTodo(item),
-                  ),
-                );
-              }),
+              _AnimatedTaskList(
+                todos: todos,
+                onOpenEditor: onOpenEditor,
+                onToggleCompleted: onToggleCompleted,
+                onDeleteTodo: onDeleteTodo,
+              ),
           ],
         ),
       ),
@@ -783,6 +777,7 @@ class _TaskSurface extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _TaskCard extends StatelessWidget {
   const _TaskCard({
     required this.item,
@@ -911,6 +906,281 @@ class _TaskCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDueAt(DateTime dueAt) {
+    return '${dueAt.month}/${dueAt.day} ${dueAt.hour.toString().padLeft(2, '0')}:${dueAt.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _AnimatedTaskList extends StatefulWidget {
+  const _AnimatedTaskList({
+    required this.todos,
+    required this.onOpenEditor,
+    required this.onToggleCompleted,
+    required this.onDeleteTodo,
+  });
+
+  final List<TodoItem> todos;
+  final Future<void> Function({TodoItem? item}) onOpenEditor;
+  final Future<void> Function(TodoItem item, bool completed) onToggleCompleted;
+  final Future<void> Function(TodoItem item) onDeleteTodo;
+
+  @override
+  State<_AnimatedTaskList> createState() => _AnimatedTaskListState();
+}
+
+class _AnimatedTaskListState extends State<_AnimatedTaskList> {
+  static const Duration _completeAnimationDuration = Duration(
+    milliseconds: 520,
+  );
+
+  final Set<int> _completingTodoIds = <int>{};
+
+  @override
+  void didUpdateWidget(covariant _AnimatedTaskList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final Set<int> activeIds = widget.todos
+        .map((TodoItem item) => item.id)
+        .toSet();
+    _completingTodoIds.removeWhere((int id) => !activeIds.contains(id));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: widget.todos.map((TodoItem item) {
+        final bool hiding = _completingTodoIds.contains(item.id);
+
+        return AnimatedSlide(
+          key: ValueKey<String>('task-slide-${item.id}'),
+          duration: _completeAnimationDuration,
+          curve: Curves.easeInOutCubicEmphasized,
+          offset: hiding ? const Offset(0.08, 0) : Offset.zero,
+          child: AnimatedOpacity(
+            duration: _completeAnimationDuration,
+            curve: Curves.easeOutCubic,
+            opacity: hiding ? 0 : 1,
+            child: AnimatedSize(
+              duration: _completeAnimationDuration,
+              curve: Curves.easeInOutCubicEmphasized,
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                height: hiding ? 0 : null,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _AnimatedTaskCard(
+                    item: item,
+                    isAnimatingCompletion: hiding,
+                    onTap: () => widget.onOpenEditor(item: item),
+                    onToggle: (bool completed) =>
+                        _handleToggle(item, completed),
+                    onDelete: () => widget.onDeleteTodo(item),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Future<void> _handleToggle(TodoItem item, bool completed) async {
+    if (_completingTodoIds.contains(item.id)) {
+      return;
+    }
+
+    if (!completed) {
+      await widget.onToggleCompleted(item, false);
+      return;
+    }
+
+    setState(() {
+      _completingTodoIds.add(item.id);
+    });
+
+    await Future<void>.delayed(_completeAnimationDuration);
+    if (!mounted) {
+      return;
+    }
+
+    await widget.onToggleCompleted(item, true);
+  }
+}
+
+class _AnimatedTaskCard extends StatelessWidget {
+  const _AnimatedTaskCard({
+    required this.item,
+    required this.isAnimatingCompletion,
+    required this.onTap,
+    required this.onToggle,
+    required this.onDelete,
+  });
+
+  final TodoItem item;
+  final bool isAnimatingCompletion;
+  final VoidCallback onTap;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final String trimmedNotes = item.notes.trim();
+    final bool hasNotes = trimmedNotes.isNotEmpty;
+    final bool overdue =
+        !item.completed &&
+        item.dueAt != null &&
+        item.dueAt!.isBefore(DateTime.now());
+    final Color baseColor = item.completed
+        ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.42)
+        : theme.colorScheme.surfaceContainerLow;
+    final Color animatedColor =
+        Color.lerp(
+          baseColor,
+          theme.colorScheme.primaryContainer.withValues(alpha: 0.92),
+          isAnimatingCompletion ? 0.78 : 0,
+        ) ??
+        baseColor;
+
+    return AnimatedScale(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutBack,
+      scale: isAnimatingCompletion ? 0.985 : 1,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: theme.colorScheme.primary.withValues(
+                alpha: isAnimatingCompletion ? 0.22 : 0.10,
+              ),
+              blurRadius: isAnimatingCompletion ? 30 : 20,
+              offset: Offset(0, isAnimatingCompletion ? 6 : 10),
+            ),
+          ],
+        ),
+        child: Material(
+          color: animatedColor,
+          borderRadius: BorderRadius.circular(26),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(26),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  AnimatedScale(
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutBack,
+                    scale: isAnimatingCompletion ? 1.12 : 1,
+                    child: Checkbox(
+                      value: item.completed || isAnimatingCompletion,
+                      onChanged: (bool? value) {
+                        if (value != null) {
+                          onToggle(value);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                item.title,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  decoration: item.completed
+                                      ? TextDecoration.lineThrough
+                                      : TextDecoration.none,
+                                  color: item.completed
+                                      ? theme.colorScheme.onSurfaceVariant
+                                      : theme.colorScheme.onSurface,
+                                ),
+                              ),
+                            ),
+                            PopupMenuButton<String>(
+                              onSelected: (String value) {
+                                if (value == 'edit') {
+                                  onTap();
+                                } else if (value == 'delete') {
+                                  onDelete();
+                                }
+                              },
+                              itemBuilder: (BuildContext context) =>
+                                  const <PopupMenuEntry<String>>[
+                                    PopupMenuItem<String>(
+                                      value: 'edit',
+                                      child: Text('编辑'),
+                                    ),
+                                    PopupMenuItem<String>(
+                                      value: 'delete',
+                                      child: Text('删除'),
+                                    ),
+                                  ],
+                            ),
+                          ],
+                        ),
+                        if (hasNotes) ...<Widget>[
+                          const SizedBox(height: 6),
+                          Text(
+                            trimmedNotes,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                        if (hasNotes) const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: <Widget>[
+                            _InfoChip(
+                              icon: item.dueAt == null
+                                  ? Icons.notifications_none_rounded
+                                  : Icons.schedule_rounded,
+                              label: item.dueAt == null
+                                  ? '未设提醒'
+                                  : _formatDueAt(item.dueAt!),
+                              urgent: overdue,
+                            ),
+                            if (item.dueAt != null && item.ringOnReminder)
+                              const _InfoChip(
+                                icon: Icons.notifications_active_rounded,
+                                label: '响铃',
+                              ),
+                            if (isAnimatingCompletion || item.completed)
+                              _InfoChip(
+                                icon: isAnimatingCompletion
+                                    ? Icons.auto_awesome_rounded
+                                    : Icons.check_circle_rounded,
+                                label: isAnimatingCompletion ? '已完成' : '已完成',
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
