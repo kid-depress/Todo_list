@@ -26,10 +26,6 @@ class TodoAlarmReceiver : BroadcastReceiver() {
         val upcoming = TodoAlarmScheduler.isUpcomingReminder(intent)
         val ringOnReminder = !upcoming && TodoAlarmScheduler.shouldRingOnReminder(context, intent)
 
-        if (!upcoming) {
-            TodoAlarmScheduler.onReminderDelivered(context, todoId)
-        }
-
         val notification = TodoAlarmScheduler.buildReminderNotification(
             context = context,
             todoId = todoId,
@@ -40,10 +36,19 @@ class TodoAlarmReceiver : BroadcastReceiver() {
             upcoming = upcoming,
         )
 
-        NotificationManagerCompat.from(context).notify(
-            if (upcoming) todoId + 1_000_000 else todoId,
-            notification,
-        )
+        try {
+            NotificationManagerCompat.from(context).notify(
+                if (upcoming) todoId + 1_000_000 else todoId,
+                notification,
+            )
+        } catch (_: Exception) {
+            return
+        }
+
+        if (!upcoming) {
+            TodoAlarmScheduler.onReminderDelivered(context, todoId)
+        }
+
         if (ringOnReminder) {
             TodoRingtoneService.start(
                 context = context,

@@ -32,15 +32,11 @@ class TodoStorage {
   }
 
   Future<void> saveTodos(List<TodoItem> items) async {
-    try {
-      await _preferences.setString(_todosKey, TodoItem.encodeList(items));
-    } catch (_) {}
+    await _preferences.setString(_todosKey, TodoItem.encodeList(items));
   }
 
   Future<void> saveNextId(int nextId) async {
-    try {
-      await _preferences.setInt(_nextIdKey, nextId);
-    } catch (_) {}
+    await _preferences.setInt(_nextIdKey, nextId);
   }
 
   Future<bool> loadAutoStartConfirmed() async {
@@ -52,9 +48,7 @@ class TodoStorage {
   }
 
   Future<void> saveAutoStartConfirmed(bool confirmed) async {
-    try {
-      await _preferences.setBool(_autoStartConfirmedKey, confirmed);
-    } catch (_) {}
+    await _preferences.setBool(_autoStartConfirmedKey, confirmed);
   }
 
   Future<bool> loadUnrestrictedBackgroundConfirmed() async {
@@ -67,11 +61,6 @@ class TodoStorage {
   }
 
   Future<void> saveUnrestrictedBackgroundConfirmed(bool confirmed) async {
-    try {
-      await _preferences.setBool(
-        _unrestrictedBackgroundConfirmedKey,
-        confirmed,
-      );
-    } catch (_) {}
+    await _preferences.setBool(_unrestrictedBackgroundConfirmedKey, confirmed);
   }
 }

@@ -25,8 +25,9 @@ class _BackgroundKeepAliveGuidePageState
   }
 
   Future<void> _openBatteryOptimizationSettings() async {
-    const AndroidIntent intent = AndroidIntent(
-      action: 'android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS',
+    final AndroidIntent intent = AndroidIntent(
+      action: 'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+      data: 'package:$_applicationId',
     );
     await intent.launch();
   }

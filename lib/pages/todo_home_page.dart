@@ -30,7 +30,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   int _nextId = 1;
   TodoFilter _filter = TodoFilter.pending;
   bool _loading = true;
-  int? _pendingNotificationTodoId;
+  final List<int> _pendingNotificationTodoIds = <int>[];
   bool _showingReminderDialog = false;
   NotificationPermissionStatus? _permissionStatus;
   bool _autoStartConfirmed = false;
@@ -82,12 +82,32 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
     _presentReminderDialogIfNeeded();
     unawaited(_notificationService.syncTodos(_todos));
+
+    final DateTime now = DateTime.now();
+    final int missedCount = todos
+        .where((TodoItem t) => !t.completed && t.dueAt != null && t.dueAt!.isBefore(now))
+        .length;
+    if (missedCount > 0 && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('有 $missedCount 项提醒已过期')),
+        );
+      });
+    }
   }
 
   Future<void> _persistState() async {
-    await _storage.saveTodos(_todos);
-    await _storage.saveNextId(_nextId);
-    await _notificationService.syncTodos(_todos);
+    try {
+      await _storage.saveNextId(_nextId);
+      await _storage.saveTodos(_todos);
+      await _notificationService.syncTodos(_todos);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('保存失败，请重试')),
+      );
+    }
   }
 
   Future<void> _reload() async {
@@ -155,7 +175,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
   }
 
   void _handleNotificationSelection(int todoId) {
-    _pendingNotificationTodoId = todoId;
+    _pendingNotificationTodoIds.add(todoId);
     _presentReminderDialogIfNeeded();
   }
 
@@ -163,25 +183,23 @@ class _TodoHomePageState extends State<TodoHomePage> {
     if (!mounted ||
         _loading ||
         _showingReminderDialog ||
-        _pendingNotificationTodoId == null) {
+        _pendingNotificationTodoIds.isEmpty) {
       return;
     }
 
-    final TodoItem? item = _findTodoById(_pendingNotificationTodoId!);
+    final int todoId = _pendingNotificationTodoIds.removeAt(0);
+    final TodoItem? item = _findTodoById(todoId);
     if (item == null) {
-      _pendingNotificationTodoId = null;
       return;
     }
 
     _showingReminderDialog = true;
-    final int todoId = item.id;
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
 
       final TodoItem? latestItem = _findTodoById(todoId);
       if (latestItem == null) {
-        _pendingNotificationTodoId = null;
         _showingReminderDialog = false;
         return;
       }
@@ -190,6 +208,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
+        enableDrag: false,
         backgroundColor: Colors.transparent,
         builder: (BuildContext context) {
           return _RingingReminderSheet(
@@ -202,7 +221,6 @@ class _TodoHomePageState extends State<TodoHomePage> {
 
       await _notificationService.stopRingtone(todoId);
 
-      _pendingNotificationTodoId = null;
       _showingReminderDialog = false;
 
       if (shouldOpen == true && mounted) {
@@ -268,6 +286,7 @@ class _TodoHomePageState extends State<TodoHomePage> {
     setState(() {
       _todos = <TodoItem>[item, ..._todos];
       _nextId += 1;
+      _filter = TodoFilter.pending;
     });
 
     await _persistState();
@@ -777,146 +796,6 @@ class _TaskSurface extends StatelessWidget {
   }
 }
 
-// ignore: unused_element
-class _TaskCard extends StatelessWidget {
-  const _TaskCard({
-    required this.item,
-    required this.onTap,
-    required this.onToggle,
-    required this.onDelete,
-  });
-
-  final TodoItem item;
-  final VoidCallback onTap;
-  final ValueChanged<bool> onToggle;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final bool overdue =
-        !item.completed &&
-        item.dueAt != null &&
-        item.dueAt!.isBefore(DateTime.now());
-
-    return Material(
-      color: item.completed
-          ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.42)
-          : theme.colorScheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(26),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(26),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Checkbox(
-                value: item.completed,
-                onChanged: (bool? value) {
-                  if (value != null) {
-                    onToggle(value);
-                  }
-                },
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            item.title,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              decoration: item.completed
-                                  ? TextDecoration.lineThrough
-                                  : TextDecoration.none,
-                              color: item.completed
-                                  ? theme.colorScheme.onSurfaceVariant
-                                  : theme.colorScheme.onSurface,
-                            ),
-                          ),
-                        ),
-                        PopupMenuButton<String>(
-                          onSelected: (String value) {
-                            if (value == 'edit') {
-                              onTap();
-                            } else if (value == 'delete') {
-                              onDelete();
-                            }
-                          },
-                          itemBuilder: (BuildContext context) =>
-                              const <PopupMenuEntry<String>>[
-                                PopupMenuItem<String>(
-                                  value: 'edit',
-                                  child: Text('编辑'),
-                                ),
-                                PopupMenuItem<String>(
-                                  value: 'delete',
-                                  child: Text('删除'),
-                                ),
-                              ],
-                        ),
-                      ],
-                    ),
-                    if (item.notes.isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 6),
-                      Text(
-                        item.notes,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          height: 1.4,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: <Widget>[
-                        _InfoChip(
-                          icon: item.dueAt == null
-                              ? Icons.notifications_none_rounded
-                              : Icons.schedule_rounded,
-                          label: item.dueAt == null
-                              ? '未设置提醒'
-                              : _formatDueAt(item.dueAt!),
-                          urgent: overdue,
-                        ),
-                        if (item.dueAt != null && item.ringOnReminder)
-                          const _InfoChip(
-                            icon: Icons.notifications_active_rounded,
-                            label: '响铃',
-                          ),
-                        if (item.completed)
-                          const _InfoChip(
-                            icon: Icons.check_circle_rounded,
-                            label: '已完成',
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _formatDueAt(DateTime dueAt) {
-    return '${dueAt.month}/${dueAt.day} ${dueAt.hour.toString().padLeft(2, '0')}:${dueAt.minute.toString().padLeft(2, '0')}';
-  }
-}
-
 class _AnimatedTaskList extends StatefulWidget {
   const _AnimatedTaskList({
     required this.todos,
@@ -948,6 +827,12 @@ class _AnimatedTaskListState extends State<_AnimatedTaskList> {
         .map((TodoItem item) => item.id)
         .toSet();
     _completingTodoIds.removeWhere((int id) => !activeIds.contains(id));
+  }
+
+  @override
+  void dispose() {
+    _completingTodoIds.clear();
+    super.dispose();
   }
 
   @override
@@ -1171,7 +1056,7 @@ class _AnimatedTaskCard extends StatelessWidget {
                                 icon: isAnimatingCompletion
                                     ? Icons.auto_awesome_rounded
                                     : Icons.check_circle_rounded,
-                                label: isAnimatingCompletion ? '已完成' : '已完成',
+                                label: isAnimatingCompletion ? '完成中...' : '已完成',
                               ),
                           ],
                         ),

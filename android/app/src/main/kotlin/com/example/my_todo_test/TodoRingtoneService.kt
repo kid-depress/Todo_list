@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.IBinder
@@ -13,6 +14,7 @@ import androidx.core.content.ContextCompat
 class TodoRingtoneService : Service() {
     private var mediaPlayer: MediaPlayer? = null
     private var activeTodoId: Int = -1
+    private var activeTriggerAtMillis: Long = -1L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -20,13 +22,70 @@ class TodoRingtoneService : Service() {
         when (intent?.action) {
             ACTION_START -> startRinging(intent)
             ACTION_STOP -> stopRinging(intent)
-            else -> stopSelf(startId)
+            else -> {
+                val restoredId = activeTodoId(this)
+                if (restoredId != null) {
+                    startRingingFromPersistence(restoredId)
+                } else {
+                    stopSelf(startId)
+                }
+            }
         }
-        return START_NOT_STICKY
+        return START_STICKY
+    }
+
+    private fun startRingingFromPersistence(todoId: Int) {
+        activeTodoId = todoId
+        activeTriggerAtMillis = prefs(this).getLong(ACTIVE_TRIGGER_AT_KEY, -1L)
+        val title = prefs(this).getString(ACTIVE_TODO_TITLE_KEY, null).orEmpty().ifBlank {
+            "Todo reminder"
+        }
+        val body = prefs(this).getString(ACTIVE_TODO_BODY_KEY, null).orEmpty().ifBlank {
+            "It's time to check this todo."
+        }
+
+        TodoAlarmScheduler.ensureNotificationChannels(this)
+
+        val notification = TodoAlarmScheduler.buildReminderNotification(
+            context = this,
+            todoId = todoId,
+            title = title,
+            body = body,
+            triggerAtMillis = activeTriggerAtMillis,
+            ringOnReminder = true,
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(todoId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        } else {
+            @Suppress("DEPRECATION")
+            startForeground(todoId, notification)
+        }
+
+        if (mediaPlayer?.isPlaying == true) {
+            return
+        }
+
+        releasePlayer()
+        runCatching {
+            mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(TodoAlarmScheduler.reminderAudioAttributes())
+                setDataSource(this@TodoRingtoneService, TodoAlarmScheduler.reminderSoundUri())
+                isLooping = true
+                prepare()
+                start()
+            }
+        }.onFailure {
+            mediaPlayer = null
+        }
     }
 
     override fun onDestroy() {
+        if (activeTodoId >= 0 && activeTriggerAtMillis >= 0L) {
+            TodoAlarmStore.suppressRing(this, activeTodoId, activeTriggerAtMillis)
+            NotificationManagerCompat.from(this).cancel(activeTodoId)
+        }
         releasePlayer()
+        clearActiveTodoId()
         super.onDestroy()
     }
 
@@ -47,7 +106,8 @@ class TodoRingtoneService : Service() {
 
         TodoAlarmScheduler.ensureNotificationChannels(this)
         activeTodoId = todoId
-        saveActiveTodoId(todoId)
+        activeTriggerAtMillis = triggerAtMillis
+        saveActiveReminder(todoId, triggerAtMillis, title, body)
 
         val notification = TodoAlarmScheduler.buildReminderNotification(
             context = this,
@@ -57,19 +117,28 @@ class TodoRingtoneService : Service() {
             triggerAtMillis = triggerAtMillis,
             ringOnReminder = true,
         )
-        startForeground(todoId, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(todoId, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        } else {
+            @Suppress("DEPRECATION")
+            startForeground(todoId, notification)
+        }
 
         if (mediaPlayer?.isPlaying == true) {
             return
         }
 
         releasePlayer()
-        mediaPlayer = MediaPlayer().apply {
-            setAudioAttributes(TodoAlarmScheduler.reminderAudioAttributes())
-            setDataSource(this@TodoRingtoneService, TodoAlarmScheduler.reminderSoundUri())
-            isLooping = true
-            prepare()
-            start()
+        runCatching {
+            mediaPlayer = MediaPlayer().apply {
+                setAudioAttributes(TodoAlarmScheduler.reminderAudioAttributes())
+                setDataSource(this@TodoRingtoneService, TodoAlarmScheduler.reminderSoundUri())
+                isLooping = true
+                prepare()
+                start()
+            }
+        }.onFailure {
+            mediaPlayer = null
         }
     }
 
@@ -111,17 +180,30 @@ class TodoRingtoneService : Service() {
         mediaPlayer = null
     }
 
-    private fun saveActiveTodoId(todoId: Int) {
-        prefs(this).edit().putInt(ACTIVE_TODO_ID_KEY, todoId).apply()
+    private fun saveActiveReminder(todoId: Int, triggerAtMillis: Long, title: String, body: String) {
+        prefs(this).edit()
+            .putInt(ACTIVE_TODO_ID_KEY, todoId)
+            .putLong(ACTIVE_TRIGGER_AT_KEY, triggerAtMillis)
+            .putString(ACTIVE_TODO_TITLE_KEY, title)
+            .putString(ACTIVE_TODO_BODY_KEY, body)
+            .apply()
     }
 
     private fun clearActiveTodoId() {
-        prefs(this).edit().remove(ACTIVE_TODO_ID_KEY).apply()
+        prefs(this).edit()
+            .remove(ACTIVE_TODO_ID_KEY)
+            .remove(ACTIVE_TRIGGER_AT_KEY)
+            .remove(ACTIVE_TODO_TITLE_KEY)
+            .remove(ACTIVE_TODO_BODY_KEY)
+            .apply()
     }
 
     companion object {
         private const val PREFS_NAME = "todo_ringtone_service"
         private const val ACTIVE_TODO_ID_KEY = "active_todo_id"
+        private const val ACTIVE_TRIGGER_AT_KEY = "active_trigger_at"
+        private const val ACTIVE_TODO_TITLE_KEY = "active_todo_title"
+        private const val ACTIVE_TODO_BODY_KEY = "active_todo_body"
         private const val ACTION_START = "com.example.my_todo_test.START_RINGTONE"
         private const val ACTION_STOP = "com.example.my_todo_test.STOP_RINGTONE"
         private const val EXTRA_TODO_ID = "todo_id"

@@ -27,7 +27,6 @@ class NotificationPermissionStatus {
   bool get allRequiredGranted =>
       canScheduleReminders &&
       unrestrictedBackgroundGranted &&
-      batteryOptimizationDisabled &&
       autoStartGranted;
 
   List<String> get missingRequiredPermissions {
@@ -44,7 +43,7 @@ class NotificationPermissionStatus {
     if (!autoStartGranted) {
       missing.add('允许自启动');
     }
-    if (!batteryOptimizationDisabled) {
+    if (!batteryOptimizationDisabled && !unrestrictedBackgroundGranted) {
       missing.add('关闭省电优化');
     }
     return missing;
@@ -176,9 +175,11 @@ class NotificationService {
         >();
 
     final bool notificationsGranted =
-        await androidPlugin?.areNotificationsEnabled() ?? true;
+        await androidPlugin?.areNotificationsEnabled() ?? false;
     final bool exactAlarmsGranted =
-        await androidPlugin?.canScheduleExactNotifications() ?? true;
+        await androidPlugin?.canScheduleExactNotifications() ?? false;
+
+    _batteryOptimizationDisabled = await _resolveBatteryOptimizationDisabled();
 
     return NotificationPermissionStatus(
       notificationsGranted: notificationsGranted,
@@ -239,6 +240,16 @@ class NotificationService {
   }
 
   Future<bool> _resolveBatteryOptimizationDisabled() async {
-    return true;
+    try {
+      final Object? result = await _alarmMethodChannel.invokeMethod<Object?>(
+        'checkBatteryOptimization',
+      );
+      if (result is bool) {
+        return result;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 }

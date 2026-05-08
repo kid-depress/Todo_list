@@ -46,12 +46,16 @@ object TodoAlarmScheduler {
             .filter { reminder -> reminder.triggerAtMillis > System.currentTimeMillis() }
             .distinctBy { reminder -> reminder.id }
 
-        TodoAlarmStore.load(context).forEach { reminder ->
-            cancel(context, reminder.id, clearSuppressedRing = false)
-        }
+        val previousIds = TodoAlarmStore.load(context).map { it.id }.toSet()
+        val newIds = sanitized.map { it.id }.toSet()
 
         TodoAlarmStore.retainSuppressedRingFor(context, sanitized)
         TodoAlarmStore.save(context, sanitized)
+
+        previousIds.filter { it !in newIds }.forEach { id ->
+            cancel(context, id, clearSuppressedRing = true)
+        }
+
         sanitized.forEach { reminder ->
             schedule(context, reminder)
         }
@@ -98,6 +102,7 @@ object TodoAlarmScheduler {
             description = RING_NOTIFICATION_CHANNEL_DESCRIPTION
             setSound(reminderSoundUri(), audioAttributes)
             enableVibration(true)
+            vibrationPattern = longArrayOf(0, 500, 400, 500, 400, 500, 400)
             setShowBadge(true)
         }
         val silentChannel = NotificationChannel(
@@ -144,7 +149,7 @@ object TodoAlarmScheduler {
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(!ringOnReminder || upcoming)
-            .setDefaults(if (ringOnReminder && !upcoming) NotificationCompat.DEFAULT_ALL else 0)
+            .setDefaults(if (ringOnReminder && !upcoming) NotificationCompat.DEFAULT_VIBRATE or NotificationCompat.DEFAULT_LIGHTS else 0)
             .setSound(if (ringOnReminder && !upcoming) reminderSoundUri() else null)
             .setSilent(upcoming || !ringOnReminder)
             .setContentIntent(buildContentIntent(context, todoId))
