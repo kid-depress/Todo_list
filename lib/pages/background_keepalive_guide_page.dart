@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class BackgroundKeepAliveGuidePage extends StatefulWidget {
   const BackgroundKeepAliveGuidePage({super.key});
@@ -11,23 +14,62 @@ class BackgroundKeepAliveGuidePage extends StatefulWidget {
 
 class _BackgroundKeepAliveGuidePageState
     extends State<BackgroundKeepAliveGuidePage> {
+  static const MethodChannel _methodChannel = MethodChannel(
+    'todo_alarm_manager/methods',
+  );
+
   bool _unrestrictedBackgroundConfirmed = false;
   bool _autoStartConfirmed = false;
+  String? _applicationId;
 
-  static const String _applicationId = 'com.example.my_todo_test';
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadApplicationId());
+  }
 
   Future<void> _openAppSettings() async {
-    final AndroidIntent intent = AndroidIntent(
-      action: 'action_application_details_settings',
-      data: 'package:$_applicationId',
-    );
-    await intent.launch();
+    await _launchPackageIntent('android.settings.APPLICATION_DETAILS_SETTINGS');
   }
 
   Future<void> _openBatteryOptimizationSettings() async {
+    await _launchPackageIntent(
+      'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+    );
+  }
+
+  Future<void> _loadApplicationId() async {
+    try {
+      final String? applicationId = await _methodChannel.invokeMethod<String>(
+        'getPackageName',
+      );
+      if (!mounted || applicationId == null || applicationId.isEmpty) {
+        return;
+      }
+      setState(() {
+        _applicationId = applicationId;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('读取应用信息失败，请稍后重试')),
+      );
+    }
+  }
+
+  Future<void> _launchPackageIntent(String action) async {
+    final String? applicationId = _applicationId;
+    if (applicationId == null || applicationId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('正在读取应用信息，请稍后再试')),
+      );
+      return;
+    }
+
     final AndroidIntent intent = AndroidIntent(
-      action: 'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
-      data: 'package:$_applicationId',
+      action: action,
+      data: 'package:$applicationId',
     );
     await intent.launch();
   }
@@ -65,12 +107,16 @@ class _BackgroundKeepAliveGuidePageState
                     runSpacing: 12,
                     children: <Widget>[
                       FilledButton.icon(
-                        onPressed: _openAppSettings,
+                        onPressed: _applicationId == null
+                            ? null
+                            : _openAppSettings,
                         icon: const Icon(Icons.settings_applications),
                         label: const Text('打开应用设置'),
                       ),
                       OutlinedButton.icon(
-                        onPressed: _openBatteryOptimizationSettings,
+                        onPressed: _applicationId == null
+                            ? null
+                            : _openBatteryOptimizationSettings,
                         icon: const Icon(Icons.battery_saver),
                         label: const Text('电池优化设置'),
                       ),

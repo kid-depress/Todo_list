@@ -10,6 +10,18 @@ import '../services/todo_storage.dart';
 import '../widgets/todo_editor_sheet.dart';
 import 'background_keepalive_guide_page.dart';
 
+class _TodoStateSnapshot {
+  const _TodoStateSnapshot({
+    required this.todos,
+    required this.nextId,
+    required this.filter,
+  });
+
+  final List<TodoItem> todos;
+  final int nextId;
+  final TodoFilter filter;
+}
+
 class TodoHomePage extends StatefulWidget {
   const TodoHomePage({super.key, this.storage, this.notificationService});
 
@@ -97,17 +109,59 @@ class _TodoHomePageState extends State<TodoHomePage> {
     }
   }
 
-  Future<void> _persistState() async {
+  Future<bool> _persistState() async {
     try {
+      await _notificationService.syncTodos(_todos);
       await _storage.saveNextId(_nextId);
       await _storage.saveTodos(_todos);
-      await _notificationService.syncTodos(_todos);
+      return true;
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('保存失败，请重试')),
       );
+      return false;
     }
+  }
+
+  _TodoStateSnapshot _createSnapshot() {
+    return _TodoStateSnapshot(
+      todos: List<TodoItem>.from(_todos),
+      nextId: _nextId,
+      filter: _filter,
+    );
+  }
+
+  Future<void> _restoreSnapshot(_TodoStateSnapshot snapshot) async {
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _todos = List<TodoItem>.from(snapshot.todos);
+      _nextId = snapshot.nextId;
+      _filter = snapshot.filter;
+    });
+
+    try {
+      await _notificationService.syncTodos(snapshot.todos);
+      await _storage.saveNextId(snapshot.nextId);
+      await _storage.saveTodos(snapshot.todos);
+    } catch (_) {
+      // Best effort: the rollback already restored in-memory state.
+    }
+  }
+
+  Future<void> _runPersistedMutation(VoidCallback mutation) async {
+    final _TodoStateSnapshot snapshot = _createSnapshot();
+    setState(mutation);
+
+    final bool persisted = await _persistState();
+    if (persisted || !mounted) {
+      return;
+    }
+
+    await _restoreSnapshot(snapshot);
   }
 
   Future<void> _reload() async {
@@ -283,17 +337,15 @@ class _TodoHomePageState extends State<TodoHomePage> {
       createdAt: DateTime.now(),
     );
 
-    setState(() {
+    await _runPersistedMutation(() {
       _todos = <TodoItem>[item, ..._todos];
       _nextId += 1;
       _filter = TodoFilter.pending;
     });
-
-    await _persistState();
   }
 
   Future<void> _updateTodo(TodoItem oldItem, TodoDraft draft) async {
-    setState(() {
+    await _runPersistedMutation(() {
       _todos = _todos.map((TodoItem item) {
         if (item.id != oldItem.id) return item;
         return item.copyWith(
@@ -304,28 +356,22 @@ class _TodoHomePageState extends State<TodoHomePage> {
         );
       }).toList();
     });
-
-    await _persistState();
   }
 
   Future<void> _toggleCompleted(TodoItem item, bool completed) async {
-    setState(() {
+    await _runPersistedMutation(() {
       _todos = _todos.map((TodoItem current) {
         if (current.id != item.id) return current;
         return current.copyWith(completed: completed);
       }).toList();
     });
-
-    await _persistState();
   }
 
   Future<void> _deleteTodo(TodoItem item) async {
-    setState(() {
+    await _runPersistedMutation(() {
       _todos.removeWhere((TodoItem current) => current.id == item.id);
       _todos = List<TodoItem>.from(_todos);
     });
-
-    await _persistState();
   }
 
   Future<void> _openEditor({TodoItem? item}) async {

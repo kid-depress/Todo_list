@@ -28,7 +28,6 @@ class TodoApp extends StatelessWidget {
       locale: const Locale('zh', 'CN'),
       supportedLocales: const <Locale>[
         Locale('zh', 'CN'),
-        Locale('en', 'US'),
       ],
       localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
         GlobalMaterialLocalizations.delegate,

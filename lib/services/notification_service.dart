@@ -12,7 +12,6 @@ class NotificationPermissionStatus {
     required this.unrestrictedBackgroundGranted,
     required this.batteryOptimizationDisabled,
     required this.autoStartGranted,
-    this.fullScreenIntentGranted,
   });
 
   final bool notificationsGranted;
@@ -20,7 +19,6 @@ class NotificationPermissionStatus {
   final bool unrestrictedBackgroundGranted;
   final bool batteryOptimizationDisabled;
   final bool autoStartGranted;
-  final bool? fullScreenIntentGranted;
 
   bool get canScheduleReminders => notificationsGranted && exactAlarmsGranted;
 
@@ -67,7 +65,6 @@ class NotificationService {
 
   StreamSubscription<dynamic>? _selectionSubscription;
   bool _initialized = false;
-  bool? _fullScreenIntentPermissionGranted;
   bool _batteryOptimizationDisabled = false;
 
   Stream<int> get notificationSelectionStream =>
@@ -100,15 +97,6 @@ class NotificationService {
           }
         });
 
-    final AndroidFlutterLocalNotificationsPlugin? androidPlugin = _plugin
-        .resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin
-        >();
-
-    await androidPlugin?.requestNotificationsPermission();
-    await androidPlugin?.requestExactAlarmsPermission();
-    _fullScreenIntentPermissionGranted = await androidPlugin
-        ?.requestFullScreenIntentPermission();
     _batteryOptimizationDisabled = await _resolveBatteryOptimizationDisabled();
 
     final int? launchTodoId = _coerceTodoId(
@@ -128,9 +116,10 @@ class NotificationService {
       return;
     }
 
+    final DateTime now = DateTime.now();
     final List<Map<String, Object?>> reminders = todos
         .where((TodoItem item) => !item.completed && item.dueAt != null)
-        .where((TodoItem item) => item.dueAt!.isAfter(DateTime.now()))
+        .where((TodoItem item) => item.dueAt!.isAfter(now))
         .map((TodoItem item) {
           return <String, Object?>{
             'id': item.id,
@@ -187,7 +176,6 @@ class NotificationService {
       unrestrictedBackgroundGranted: unrestrictedBackgroundGranted,
       batteryOptimizationDisabled: _batteryOptimizationDisabled,
       autoStartGranted: autoStartGranted,
-      fullScreenIntentGranted: _fullScreenIntentPermissionGranted,
     );
   }
 
@@ -212,8 +200,6 @@ class NotificationService {
 
     await androidPlugin?.requestNotificationsPermission();
     await androidPlugin?.requestExactAlarmsPermission();
-    _fullScreenIntentPermissionGranted = await androidPlugin
-        ?.requestFullScreenIntentPermission();
     _batteryOptimizationDisabled = await _resolveBatteryOptimizationDisabled();
 
     return getPermissionStatusWithAutoStart(

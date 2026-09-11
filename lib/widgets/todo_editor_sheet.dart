@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/todo_draft.dart';
 import '../models/todo_item.dart';
+import '../validators/todo_draft_validator.dart';
 
 class TodoEditorSheet extends StatefulWidget {
   const TodoEditorSheet({
@@ -89,6 +90,12 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
 
   void _save() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    final String? dueAtError = validateReminderTime(_dueAt);
+    if (dueAtError != null) {
+      setState(() {});
+      return;
+    }
+
     Navigator.of(context).pop(
       TodoDraft(
         title: _titleController.text,
@@ -102,6 +109,7 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final String? dueAtErrorText = validateReminderTime(_dueAt);
     final String dueText = _dueAt == null
         ? '未设置提醒时间'
         : '${_dueAt!.year}/${_dueAt!.month.toString().padLeft(2, '0')}/${_dueAt!.day.toString().padLeft(2, '0')} ${_dueAt!.hour.toString().padLeft(2, '0')}:${_dueAt!.minute.toString().padLeft(2, '0')}';
@@ -222,6 +230,7 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
                       const SizedBox(height: 10),
                       _ReminderPanel(
                         dueText: dueText,
+                        errorText: dueAtErrorText,
                         hasDueAt: _dueAt != null,
                         ringOnReminder: _ringOnReminder,
                         onPickDate: _pickDate,
@@ -264,6 +273,7 @@ class _TodoEditorSheetState extends State<TodoEditorSheet> {
 class _ReminderPanel extends StatelessWidget {
   const _ReminderPanel({
     required this.dueText,
+    required this.errorText,
     required this.hasDueAt,
     required this.ringOnReminder,
     required this.onPickDate,
@@ -273,6 +283,7 @@ class _ReminderPanel extends StatelessWidget {
   });
 
   final String dueText;
+  final String? errorText;
   final bool hasDueAt;
   final bool ringOnReminder;
   final VoidCallback onPickDate;
@@ -300,6 +311,19 @@ class _ReminderPanel extends StatelessWidget {
             title: const Text('当前提醒'),
             subtitle: Text(dueText),
           ),
+          if (errorText != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  errorText!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ),
+            ),
           const SizedBox(height: 6),
           Wrap(
             spacing: 10,

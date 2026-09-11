@@ -87,7 +87,6 @@ android/app/src/main/kotlin/com/example/my_todo_test/
 - `RECEIVE_BOOT_COMPLETED`
 - `FOREGROUND_SERVICE`
 - `FOREGROUND_SERVICE_MEDIA_PLAYBACK`
-- `USE_FULL_SCREEN_INTENT`
 
 为了让提醒更稳定，除了系统权限之外，通常还需要用户手动完成这些设置：
 

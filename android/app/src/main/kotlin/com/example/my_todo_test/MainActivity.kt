@@ -58,6 +58,10 @@ class MainActivity : FlutterActivity() {
                     result.success(ignored)
                 }
 
+                "getPackageName" -> {
+                    result.success(packageName)
+                }
+
                 else -> result.notImplemented()
             }
         }
