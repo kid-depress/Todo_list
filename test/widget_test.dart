@@ -1,4 +1,5 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
@@ -51,6 +52,26 @@ void main() {
     expect(find.text('任务提醒'), findsOneWidget);
     expect(find.text('新建任务'), findsOneWidget);
     expect(notificationService.syncCount, greaterThan(0));
+  });
+
+  testWidgets('uses dashboard cards to switch task filters', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      TodoApp(notificationService: FakeNotificationService()),
+    );
+    await tester.pump();
+
+    expect(find.byType(SegmentedButton), findsNothing);
+    expect(find.text('待办任务'), findsOneWidget);
+
+    await tester.tap(find.text('今天'));
+    await tester.pump();
+    expect(find.text('今天提醒'), findsOneWidget);
+
+    await tester.tap(find.text('完成'));
+    await tester.pump();
+    expect(find.text('已完成'), findsOneWidget);
   });
 
   test('can schedule reminders before keepalive guidance is confirmed', () {

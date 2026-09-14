@@ -468,6 +468,13 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                             todayCount: _todayTodos.length,
                                             completedCount:
                                                 _completedTodos.length,
+                                            selectedFilter: _filter,
+                                            onFilterChanged:
+                                                (TodoFilter value) {
+                                                  setState(
+                                                    () => _filter = value,
+                                                  );
+                                                },
                                             permissionStatus: _permissionStatus,
                                             onCheckPermissions:
                                                 _ensureReminderPermissions,
@@ -480,12 +487,6 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                           child: _TaskSurface(
                                             filter: _filter,
                                             todos: visibleTodos,
-                                            onFilterChanged:
-                                                (TodoFilter value) {
-                                                  setState(
-                                                    () => _filter = value,
-                                                  );
-                                                },
                                             onOpenEditor: _openEditor,
                                             onToggleCompleted: _toggleCompleted,
                                             onDeleteTodo: _deleteTodo,
@@ -506,6 +507,10 @@ class _TodoHomePageState extends State<TodoHomePage> {
                                 pendingCount: _pendingCount,
                                 todayCount: _todayTodos.length,
                                 completedCount: _completedTodos.length,
+                                selectedFilter: _filter,
+                                onFilterChanged: (TodoFilter value) {
+                                  setState(() => _filter = value);
+                                },
                                 permissionStatus: _permissionStatus,
                                 onCheckPermissions: _ensureReminderPermissions,
                                 onOpenKeepAliveGuide: _openKeepAliveGuide,
@@ -514,9 +519,6 @@ class _TodoHomePageState extends State<TodoHomePage> {
                               _TaskSurface(
                                 filter: _filter,
                                 todos: visibleTodos,
-                                onFilterChanged: (TodoFilter value) {
-                                  setState(() => _filter = value);
-                                },
                                 onOpenEditor: _openEditor,
                                 onToggleCompleted: _toggleCompleted,
                                 onDeleteTodo: _deleteTodo,
@@ -549,6 +551,8 @@ class _DashboardRail extends StatelessWidget {
     required this.pendingCount,
     required this.todayCount,
     required this.completedCount,
+    required this.selectedFilter,
+    required this.onFilterChanged,
     required this.permissionStatus,
     required this.onCheckPermissions,
     required this.onOpenKeepAliveGuide,
@@ -557,6 +561,8 @@ class _DashboardRail extends StatelessWidget {
   final int pendingCount;
   final int todayCount;
   final int completedCount;
+  final TodoFilter selectedFilter;
+  final ValueChanged<TodoFilter> onFilterChanged;
   final NotificationPermissionStatus? permissionStatus;
   final Future<void> Function() onCheckPermissions;
   final Future<void> Function() onOpenKeepAliveGuide;
@@ -613,6 +619,8 @@ class _DashboardRail extends StatelessWidget {
                 label: '待办',
                 value: pendingCount,
                 icon: Icons.radio_button_unchecked_rounded,
+                selected: selectedFilter == TodoFilter.pending,
+                onTap: () => onFilterChanged(TodoFilter.pending),
               ),
             ),
             const SizedBox(width: 10),
@@ -621,6 +629,8 @@ class _DashboardRail extends StatelessWidget {
                 label: '今天',
                 value: todayCount,
                 icon: Icons.today_rounded,
+                selected: selectedFilter == TodoFilter.today,
+                onTap: () => onFilterChanged(TodoFilter.today),
               ),
             ),
             const SizedBox(width: 10),
@@ -629,6 +639,8 @@ class _DashboardRail extends StatelessWidget {
                 label: '完成',
                 value: completedCount,
                 icon: Icons.done_all_rounded,
+                selected: selectedFilter == TodoFilter.completed,
+                onTap: () => onFilterChanged(TodoFilter.completed),
               ),
             ),
           ],
@@ -651,36 +663,64 @@ class _MetricCard extends StatelessWidget {
     required this.label,
     required this.value,
     required this.icon,
+    required this.selected,
+    required this.onTap,
   });
 
   final String label;
   final int value;
   final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Icon(icon, color: theme.colorScheme.primary),
-            const SizedBox(height: 12),
-            Text(
-              '$value',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w900,
-              ),
+    final Color contentColor = selected
+        ? theme.colorScheme.onPrimaryContainer
+        : theme.colorScheme.onSurface;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      excludeSemantics: true,
+      label: '$label，$value 项',
+      child: Card(
+        color: selected ? theme.colorScheme.primaryContainer : null,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Icon(
+                  icon,
+                  color: selected
+                      ? theme.colorScheme.onPrimaryContainer
+                      : theme.colorScheme.primary,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '$value',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: contentColor,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: selected
+                        ? theme.colorScheme.onPrimaryContainer
+                        : theme.colorScheme.onSurfaceVariant,
+                    fontWeight: selected ? FontWeight.w800 : null,
+                  ),
+                ),
+              ],
             ),
-            Text(
-              label,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -764,7 +804,6 @@ class _TaskSurface extends StatelessWidget {
   const _TaskSurface({
     required this.filter,
     required this.todos,
-    required this.onFilterChanged,
     required this.onOpenEditor,
     required this.onToggleCompleted,
     required this.onDeleteTodo,
@@ -772,7 +811,6 @@ class _TaskSurface extends StatelessWidget {
 
   final TodoFilter filter;
   final List<TodoItem> todos;
-  final ValueChanged<TodoFilter> onFilterChanged;
   final Future<void> Function({TodoItem? item}) onOpenEditor;
   final Future<void> Function(TodoItem item, bool completed) onToggleCompleted;
   final Future<void> Function(TodoItem item) onDeleteTodo;
@@ -792,30 +830,6 @@ class _TaskSurface extends StatelessWidget {
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w900,
               ),
-            ),
-            const SizedBox(height: 12),
-            SegmentedButton<TodoFilter>(
-              segments: const <ButtonSegment<TodoFilter>>[
-                ButtonSegment<TodoFilter>(
-                  value: TodoFilter.pending,
-                  label: Text('待办'),
-                  icon: Icon(Icons.radio_button_unchecked_rounded),
-                ),
-                ButtonSegment<TodoFilter>(
-                  value: TodoFilter.today,
-                  label: Text('今天'),
-                  icon: Icon(Icons.today_rounded),
-                ),
-                ButtonSegment<TodoFilter>(
-                  value: TodoFilter.completed,
-                  label: Text('完成'),
-                  icon: Icon(Icons.done_all_rounded),
-                ),
-              ],
-              selected: <TodoFilter>{filter},
-              onSelectionChanged: (Set<TodoFilter> values) {
-                onFilterChanged(values.first);
-              },
             ),
             const SizedBox(height: 16),
             if (todos.isEmpty)
