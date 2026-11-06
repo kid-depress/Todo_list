@@ -917,7 +917,7 @@ class _AnimatedTaskListState extends State<_AnimatedTaskList> {
               child: SizedBox(
                 height: hiding ? 0 : null,
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.only(bottom: 8),
                   child: _AnimatedTaskCard(
                     item: item,
                     isAnimatingCompletion: hiding,
@@ -1019,7 +1019,10 @@ class _AnimatedTaskCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(26),
             onTap: onTap,
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
@@ -1045,17 +1048,37 @@ class _AnimatedTaskCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Expanded(
-                              child: Text(
-                                item.title,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  decoration: item.completed
-                                      ? TextDecoration.lineThrough
-                                      : TextDecoration.none,
-                                  color: item.completed
-                                      ? theme.colorScheme.onSurfaceVariant
-                                      : theme.colorScheme.onSurface,
-                                ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  Text(
+                                    item.title,
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      decoration: item.completed
+                                          ? TextDecoration.lineThrough
+                                          : TextDecoration.none,
+                                      color: item.completed
+                                          ? theme.colorScheme.onSurfaceVariant
+                                          : theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  if (hasNotes) ...<Widget>[
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      trimmedNotes,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                            height: 1.3,
+                                          ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                             PopupMenuButton<String>(
@@ -1080,19 +1103,7 @@ class _AnimatedTaskCard extends StatelessWidget {
                             ),
                           ],
                         ),
-                        if (hasNotes) ...<Widget>[
-                          const SizedBox(height: 6),
-                          Text(
-                            trimmedNotes,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                        if (hasNotes) const SizedBox(height: 12),
+                        if (hasNotes) const SizedBox(height: 10),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,

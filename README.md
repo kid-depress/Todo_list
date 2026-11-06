@@ -14,6 +14,14 @@
 - 应用重启或设备重启后自动恢复已安排的提醒
 - 内置 Android 后台保活指引页，方便用户补齐自启动、后台无限制等设置
 
+<table>
+  <tr>
+    <td><img src="https://picgo.2006111.xyz/pigo/picgo/IMG_20261106_141409.jpg" width="200" /></td>
+    <td><img src="https://picgo.2006111.xyz/pigo/picgo/IMG_20261106_141845.jpg" width="200" /></td>
+    <td><img src="https://picgo.2006111.xyz/pigo/picgo/IMG_20261106_141422.jpg" width="200" /></td>
+  </tr>
+</table>
+
 ## 技术栈
 
 - Flutter 3.38.9
